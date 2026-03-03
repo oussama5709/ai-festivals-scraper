@@ -8,6 +8,7 @@
       "title": "Search Regions",
       "description": "Select regions to search for events",
       "type": "array",
+      "editor": "stringList",
       "items": {
         "type": "string",
         "enum": [
@@ -26,6 +27,7 @@
       "title": "Maximum Results",
       "description": "Maximum number of events to return (10-1000)",
       "type": "integer",
+      "editor": "number",
       "minimum": 10,
       "maximum": 1000,
       "default": 100
@@ -34,12 +36,14 @@
       "title": "Upcoming Events Only",
       "description": "Return only upcoming events",
       "type": "boolean",
+      "editor": "checkbox",
       "default": true
     },
     "minDate": {
       "title": "Minimum Date",
       "description": "Minimum date for events (YYYY-MM-DD format)",
       "type": "string",
+      "editor": "text",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
       "default": ""
     },
@@ -47,6 +51,7 @@
       "title": "Event Types",
       "description": "Types of events to include",
       "type": "array",
+      "editor": "stringList",
       "items": {
         "type": "string",
         "enum": [
@@ -65,6 +70,7 @@
       "title": "Sort By",
       "description": "How to sort results",
       "type": "string",
+      "editor": "select",
       "enum": [
         "relevance",
         "date",
