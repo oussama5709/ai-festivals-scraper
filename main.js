@@ -1,6 +1,8 @@
 const { Actor } = require('apify');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 
 // إعدادات المصادر والمؤتمرات
 const SOURCES = {
@@ -145,7 +147,56 @@ Actor.main(async () => {
 
     console.log(`\n✅ تم جمع ${processedEvents.length} حدث بنجاح!`);
     console.log(`📈 البيانات محفوظة في Dataset: ${dataset.id}`);
+
+    // تصدير للـ CSV لسهولة الفتح في Excel
+    try {
+        const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
+        const csvContent = jsonToCsv(processedEvents);
+        fs.writeFileSync(csvFile, csvContent, 'utf8');
+        console.log(`📊 تم تصدير الجدول للـ Excel: ${csvFile}`);
+    } catch (err) {
+        console.log(`⚠️ فشل تصدير الـ CSV: ${err.message}`);
+    }
 });
+
+/**
+ * تحويل البيانات لـ CSV منظّم
+ */
+function jsonToCsv(items) {
+    if (!items || !items.length) return '';
+
+    // العناوين (Headers)
+    const headers = ['Name', 'Date', 'Location', 'Type', 'Region', 'URL', 'Description'];
+    const csvRows = [];
+
+    // إضافة العناوين
+    csvRows.push(headers.join(','));
+
+    // إضافة الأسطر
+    for (const item of items) {
+        const row = [
+            escapeCsv(item.name),
+            escapeCsv(item.date || item.dateInfo),
+            escapeCsv(item.location),
+            escapeCsv(item.category),
+            escapeCsv(item.region),
+            escapeCsv(item.url),
+            escapeCsv(item.description || '')
+        ];
+        csvRows.push(row.join(','));
+    }
+
+    return '\ufeff' + csvRows.join('\n'); // \ufeff for Excel UTF-8 support
+}
+
+function escapeCsv(value) {
+    if (value === null || value === undefined) return '""';
+    const stringValue = String(value).replace(/"/g, '""');
+    if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+        return `"${stringValue}"`;
+    }
+    return stringValue;
+}
 
 // =====================
 // دوال مساعدة

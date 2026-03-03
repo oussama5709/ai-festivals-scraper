@@ -1,10 +1,8 @@
 {
     "searchRegions": [
-        "worldwide",
-        "middle-east",
-        "africa"
+        "middle-east"
     ],
-    "maxResults": 100,
+    "maxResults": 10,
     "upcomingOnly": true,
     "includeEventTypes": [
         "conference",
