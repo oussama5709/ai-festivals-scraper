@@ -8,7 +8,7 @@
       "title": "Search Regions",
       "description": "Select regions to search for events",
       "type": "array",
-      "editor": "stringList",
+      "editor": "select",
       "items": {
         "type": "string",
         "enum": [
@@ -20,7 +20,9 @@
           "americas"
         ]
       },
-      "default": ["worldwide"],
+      "default": [
+        "worldwide"
+      ],
       "minItems": 1
     },
     "maxResults": {
@@ -51,7 +53,7 @@
       "title": "Event Types",
       "description": "Types of events to include",
       "type": "array",
-      "editor": "stringList",
+      "editor": "select",
       "items": {
         "type": "string",
         "enum": [
@@ -64,7 +66,10 @@
           "course"
         ]
       },
-      "default": ["conference", "workshop"]
+      "default": [
+        "conference",
+        "workshop"
+      ]
     },
     "sortBy": {
       "title": "Sort By",
@@ -79,5 +84,7 @@
       "default": "relevance"
     }
   },
-  "required": ["searchRegions"]
+  "required": [
+    "searchRegions"
+  ]
 }
