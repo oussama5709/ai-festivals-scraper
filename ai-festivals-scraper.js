@@ -9,7 +9,7 @@ const SOURCES = {
         name: 'Eventbrite AI Events'
     },
     conftech: {
-        url: 'https://conftech.ai/', 
+        url: 'https://conftech.ai/',
         name: 'ConfTech AI'
     },
     aiconferences: {
@@ -64,7 +64,7 @@ const MAJOR_CONFERENCES = [
 
 Apify.main(async () => {
     const input = await Apify.getInput();
-    
+
     const {
         searchRegions = ['worldwide', 'middle-east', 'africa', 'europe', 'asia', 'americas'],
         upcomingOnly = true,
@@ -74,7 +74,7 @@ Apify.main(async () => {
 
     const dataset = await Apify.openDataset();
     const requestQueue = await Apify.openRequestQueue();
-    
+
     console.log('🚀 بدء جمع أحداث الذكاء الاصطناعي...');
     console.log(`📍 المناطق المستهدفة: ${searchRegions.join(', ')}`);
     console.log(`📅 التاريخ الأدنى: ${minDate}`);
@@ -82,7 +82,7 @@ Apify.main(async () => {
     // 1. جمع المؤتمرات الرسمية الشهيرة
     console.log('\n📊 جمع المؤتمرات الرسمية الشهيرة...');
     const majorConferences = await scrapeMajorConferences(MAJOR_CONFERENCES, minDate);
-    
+
     for (const conf of majorConferences) {
         await dataset.pushData(conf);
     }
@@ -90,7 +90,7 @@ Apify.main(async () => {
     // 2. جمع من Eventbrite
     console.log('\n🎪 جمع الأحداث من Eventbrite...');
     const eventbriteEvents = await scrapeEventbrite(searchRegions, minDate);
-    
+
     for (const event of eventbriteEvents.slice(0, maxResults)) {
         await dataset.pushData(event);
     }
@@ -98,7 +98,7 @@ Apify.main(async () => {
     // 3. جمع من Meetup (إذا كان هناك API access)
     console.log('\n👥 جمع من مجتمعات Meetup...');
     const meetupEvents = await scrapeMeetup(searchRegions, minDate);
-    
+
     for (const event of meetupEvents.slice(0, maxResults)) {
         await dataset.pushData(event);
     }
@@ -106,7 +106,7 @@ Apify.main(async () => {
     // 4. جمع من LinkedIn Events
     console.log('\n💼 جمع من LinkedIn Events...');
     const linkedinEvents = await scrapeLinkedIn(searchRegions, minDate);
-    
+
     for (const event of linkedinEvents.slice(0, maxResults)) {
         await dataset.pushData(event);
     }
@@ -114,7 +114,7 @@ Apify.main(async () => {
     // 5. تنسيق وتنظيف البيانات
     console.log('\n🔄 تنسيق البيانات النهائية...');
     const allEvents = await dataset.getData();
-    
+
     const processedEvents = allEvents.items
         .filter(event => {
             // إزالة التكرارات
@@ -136,6 +136,7 @@ Apify.main(async () => {
             conferences: processedEvents.filter(e => e.category === 'conference').length,
             workshops: processedEvents.filter(e => e.category === 'workshop').length,
             meetups: processedEvents.filter(e => e.category === 'meetup').length,
+            aiFilmFestivals: processedEvents.filter(e => e.category === 'ai-film-festival').length,
             generatedAt: new Date().toISOString(),
             regions: searchRegions
         },
@@ -155,7 +156,7 @@ Apify.main(async () => {
  */
 async function scrapeMajorConferences(conferences, minDate) {
     const events = [];
-    
+
     for (const conf of conferences) {
         try {
             const { data } = await axios.get(conf.url, {
@@ -164,13 +165,13 @@ async function scrapeMajorConferences(conferences, minDate) {
                 },
                 timeout: 10000
             });
-            
+
             const $ = cheerio.load(data);
-            
+
             // البحث عن معلومات التاريخ والموقع
             const dateText = $('*').text().match(/\d{4}|\d{1,2}\/\d{1,2}/g) || [];
             const locationText = $('*').text().match(/([A-Z][a-z]+,\s*[A-Z]{2}|\w+,\s*\w+)/g) || [];
-            
+
             events.push({
                 name: conf.name,
                 url: conf.url,
@@ -186,7 +187,7 @@ async function scrapeMajorConferences(conferences, minDate) {
             console.log(`⚠️ خطأ في جمع بيانات ${conf.name}: ${error.message}`);
         }
     }
-    
+
     return events;
 }
 
@@ -195,7 +196,7 @@ async function scrapeMajorConferences(conferences, minDate) {
  */
 async function scrapeEventbrite(regions, minDate) {
     const events = [];
-    
+
     for (const region of regions) {
         try {
             // URL مخصصة حسب المنطقة
@@ -207,7 +208,7 @@ async function scrapeEventbrite(regions, minDate) {
                 'asia': 'https://www.eventbrite.com/d/asia/artificial-intelligence--events/',
                 'americas': 'https://www.eventbrite.com/d/americas/artificial-intelligence--events/'
             };
-            
+
             const url = urls[region] || urls['worldwide'];
             const { data } = await axios.get(url, {
                 headers: {
@@ -215,16 +216,16 @@ async function scrapeEventbrite(regions, minDate) {
                 },
                 timeout: 10000
             });
-            
+
             const $ = cheerio.load(data);
-            
+
             $('[data-eventid]').each((i, elem) => {
                 const $event = $(elem);
                 const name = $event.find('[data-spec-id="event-title"]').text().trim();
                 const date = $event.find('[data-spec-id="event-date"]').text().trim();
                 const location = $event.find('[data-spec-id="event-location"]').text().trim();
                 const link = $event.find('a').attr('href');
-                
+
                 if (name && link) {
                     events.push({
                         name,
@@ -238,12 +239,12 @@ async function scrapeEventbrite(regions, minDate) {
                     });
                 }
             });
-            
+
         } catch (error) {
             console.log(`⚠️ خطأ في جمع Eventbrite (${region}): ${error.message}`);
         }
     }
-    
+
     return events;
 }
 
@@ -252,31 +253,31 @@ async function scrapeEventbrite(regions, minDate) {
  */
 async function scrapeMeetup(regions, minDate) {
     const events = [];
-    
+
     // يمكن استخدام Meetup API إذا كان لديك API key
     const keywords = ['artificial intelligence', 'machine learning', 'deep learning', 'AI workshop'];
-    
+
     for (const keyword of keywords) {
         for (const region of regions) {
             try {
                 // هذا مثال - يحتاج إلى API key في بيئة الإنتاج
                 const searchUrl = `https://www.meetup.com/find/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(region)}`;
-                
+
                 const { data } = await axios.get(searchUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0'
                     },
                     timeout: 10000
                 });
-                
+
                 const $ = cheerio.load(data);
-                
+
                 $('[data-eventchip]').each((i, elem) => {
                     const $event = $(elem);
                     const name = $event.find('a[href*="/events/"]').text().trim();
                     const url = $event.find('a[href*="/events/"]').attr('href');
                     const date = $event.find('[data-testid="eventDate"]').text().trim();
-                    
+
                     if (name && url) {
                         events.push({
                             name,
@@ -289,13 +290,13 @@ async function scrapeMeetup(regions, minDate) {
                         });
                     }
                 });
-                
+
             } catch (error) {
                 console.log(`⚠️ خطأ في جمع Meetup (${region}/${keyword}): ${error.message}`);
             }
         }
     }
-    
+
     return events;
 }
 
@@ -304,11 +305,11 @@ async function scrapeMeetup(regions, minDate) {
  */
 async function scrapeLinkedIn(regions, minDate) {
     const events = [];
-    
+
     try {
         // LinkedIn يتطلب تسجيل دخول - هذا مثال تقريبي
         const searchUrl = 'https://www.linkedin.com/events/search/?keywords=artificial%20intelligence';
-        
+
         // ملاحظة: قد تحتاج إلى استخدام linkedin-scraper أو API شرعي
         // هنا نضيف بيانات محاكاة كمثال
         events.push({
@@ -318,11 +319,11 @@ async function scrapeLinkedIn(regions, minDate) {
             type: 'webinar',
             tags: ['ai', 'webinar', 'learning']
         });
-        
+
     } catch (error) {
         console.log(`⚠️ خطأ في جمع LinkedIn: ${error.message}`);
     }
-    
+
     return events;
 }
 
@@ -331,7 +332,7 @@ async function scrapeLinkedIn(regions, minDate) {
  */
 function categorizeEvent(name, description) {
     const text = `${name} ${description}`.toLowerCase();
-    
+
     if (text.includes('conference') || text.includes('مؤتمر')) return 'conference';
     if (text.includes('workshop') || text.includes('ورشة')) return 'workshop';
     if (text.includes('meetup') || text.includes('لقاء')) return 'meetup';
@@ -339,7 +340,8 @@ function categorizeEvent(name, description) {
     if (text.includes('summit') || text.includes('قمة')) return 'summit';
     if (text.includes('hackathon') || text.includes('هاكاثون')) return 'hackathon';
     if (text.includes('course') || text.includes('دورة')) return 'course';
-    
+    if (text.includes('film') || text.includes('فيلم') || text.includes('cinema') || text.includes('movie')) return 'ai-film-festival';
+
     return 'event';
 }
 
@@ -348,7 +350,7 @@ function categorizeEvent(name, description) {
  */
 function detectRegion(location, validRegions) {
     const loc = location.toLowerCase();
-    
+
     const regionKeywords = {
         'middle-east': ['middle east', 'الشرق الأوسط', 'dubai', 'qatar', 'saudi', 'uae'],
         'africa': ['africa', 'أفريقيا', 'egypt', 'مصر', 'south africa', 'nairobi'],
@@ -356,12 +358,12 @@ function detectRegion(location, validRegions) {
         'asia': ['asia', 'آسيا', 'singapore', 'hong kong', 'tokyo', 'mumbai', 'india'],
         'americas': ['america', 'أمريكا', 'new york', 'san francisco', 'toronto', 'brazil']
     };
-    
+
     for (const [region, keywords] of Object.entries(regionKeywords)) {
         if (keywords.some(kw => loc.includes(kw))) {
             return region;
         }
     }
-    
+
     return 'worldwide';
 }

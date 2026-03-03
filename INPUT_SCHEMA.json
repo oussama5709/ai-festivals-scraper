@@ -63,12 +63,14 @@
           "webinar",
           "summit",
           "hackathon",
-          "course"
+          "course",
+          "ai-film-festival"
         ]
       },
       "default": [
         "conference",
-        "workshop"
+        "workshop",
+        "ai-film-festival"
       ]
     },
     "sortBy": {
