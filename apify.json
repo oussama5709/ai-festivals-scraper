@@ -1,0 +1,55 @@
+{
+  "actorSpecification": 1,
+  "name": "ai-festivals-scraper",
+  "title": "AI Festivals & Conferences Scraper 🤖",
+  "description": "جامع ذكي لمهرجانات وأحداث الذكاء الاصطناعي من حول العالم - Intelligent scraper for AI festivals, conferences & events worldwide from multiple sources",
+  "version": "1.0.0",
+  "buildTag": "latest",
+  "env": {
+    "APIFY_HEADLESS": "1",
+    "APIFY_MEMORY_MBYTES": "4096"
+  },
+  "dockerfile": "Dockerfile",
+  "gitHubGissues": true,
+  "category": "PRODUCTIVITY",
+  "tags": [
+    "AI",
+    "Artificial Intelligence",
+    "Conferences",
+    "Events",
+    "Scraper",
+    "Eventbrite",
+    "Meetup",
+    "Technology",
+    "Arabic",
+    "Global"
+  ],
+  "storageDir": "./storage",
+  "repellishDays": 30,
+  "resources": {
+    "jobMaxDurationSecs": 3600
+  },
+  "meta": {
+    "templateId": "ai-festivals-scraper"
+  },
+  "changelog": {
+    "version": "1.0.0",
+    "releaseDate": "2025-03-03",
+    "changes": [
+      "🎉 الإطلاق الأولي - Initial Release",
+      "✨ جمع من 5 مصادر مختلفة - Support for 5 different data sources",
+      "🌍 دعم 6 مناطق جغرافية - Support for 6 geographic regions",
+      "🏷️ تصنيف تلقائي للأحداث - Automatic event categorization",
+      "🔄 إزالة التكرارات - Duplicate removal",
+      "📊 دعم صيغ متعددة - Multiple output formats",
+      "🌐 دعم اللغة العربية والإنجليزية - Arabic & English support"
+    ]
+  },
+  "pricing": {
+    "credits": {
+      "perRun": 10,
+      "description": "تكلفة كل تشغيل للـ actor",
+      "perComputeUnit": 1
+    }
+  }
+}
