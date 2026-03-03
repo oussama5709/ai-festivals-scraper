@@ -1,0 +1,14 @@
+{
+    "searchRegions": [
+        "worldwide",
+        "middle-east",
+        "africa"
+    ],
+    "maxResults": 100,
+    "upcomingOnly": true,
+    "includeEventTypes": [
+        "conference",
+        "workshop",
+        "ai-film-festival"
+    ]
+}

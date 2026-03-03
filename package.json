@@ -2,7 +2,7 @@
     "name": "ai-festivals-scraper",
     "version": "1.0.0",
     "description": "Smart scraper for AI events worldwide",
-    "main": "ai-festivals-scraper.js",
+    "main": "main.js",
     "dependencies": {
         "apify": "^3.0.0",
         "axios": "^1.0.0",
@@ -10,7 +10,7 @@
         "got-scraping": "^3.0.0"
     },
     "scripts": {
-        "start": "node ai-festivals-scraper.js",
+        "start": "node main.js",
         "test": "node test.js"
     },
     "author": "oussama5709",
