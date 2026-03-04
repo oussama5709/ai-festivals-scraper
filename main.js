@@ -45,18 +45,15 @@ Actor.main(async () => {
     const processedEvents = allRawEvents.map(event => {
         const category = categorizeEvent(event.name, event.description || '');
         return {
-            organizer: event.organizer || 'Unknown Organizer',
-            name: event.name,
-            startDate: event.startDate || event.date || 'TBD',
-            endDate: event.endDate || 'TBD',
-            isFree: event.isFree !== undefined ? (event.isFree ? 'نعم (Free)' : 'مدفوع (Paid)') : 'غير محدد',
-            location: event.location || 'Online / Global',
+            name: event.name || 'N/A',
+            address: event.location || 'Online / Global',
+            phone: event.phone || '', // خانة الهاتف
+            sitePage: event.url,
+            regLink: event.url, // حالياً نفس الرابط
+            dates: `${event.startDate || 'TBD'} - ${event.endDate || 'TBD'}`,
             rules: event.rules || 'راجع الموقع للتفاصيل',
             prizes: event.prizes || 'لا يوجد معلومات حالياً',
-            topics: event.topics || 'AI, Technology',
-            url: event.url,
-            category: category,
-            source: event.source || 'Scraper'
+            topics: event.topics || 'AI, Technology'
         };
     }).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
 
@@ -68,10 +65,10 @@ Actor.main(async () => {
     // 4. تصدير للـ Excel (CSV) بالتنسيق الجديد المطلوب
     try {
         const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
-        const csvContent = jsonToDetailedCsv(processedEvents);
+        const csvContent = jsonToProfessionalCsv(processedEvents);
         fs.writeFileSync(csvFile, csvContent, 'utf8');
         console.log(`\n✅ تم بنجاح!`);
-        console.log(`📊 الجدول جاهز هنا: ${csvFile}`);
+        console.log(`📊 الجدول المنظم جاهز هنا: ${csvFile}`);
     } catch (err) {
         console.log(`⚠️ فشل تصدير الملف: ${err.message}`);
     }
@@ -171,45 +168,42 @@ function categorizeEvent(name, description) {
 }
 
 /**
- * تحويل للـ CSV المطلوب (باللغة العربية والترتيب الجديد)
+ * تحويل للـ CSV المنظم حسب طلب المستخدم (بالترتيب الجديد)
  */
-function jsonToDetailedCsv(items) {
+function jsonToProfessionalCsv(items) {
     if (!items || !items.length) return '';
 
-    // العناوين المطلوبة
+    // العناوين المطلوبة بالضبط
     const headers = [
-        'الموقع المنظم (Organizer)',
-        'اسم الحدث (Event Name)',
-        'تاريخ البداية (Start Date)',
-        'تاريخ النهاية (End Date)',
-        'هل مجاني؟ (Is Free?)',
-        'المكان (Location)',
+        'العنوان (Title)',
+        'العنوان/المكان (Address)',
+        'الهاتف (Phone)',
+        'الصفحة الرسمية (Site Page)',
+        'رابط التسجيل (Reg Link)',
+        'التواريخ (Dates)',
         'شروط المسابقة (Rules)',
         'الجوائز (Prizes)',
-        'مواضيع المسابقة (Topics)',
-        'رابط التسجيل (Registration Link)',
-        'المصدر (Source)'
+        'مواضيع المسابقة (Topics)'
     ];
 
     const csvRows = [headers.join(',')];
 
     for (const item of items) {
         const row = [
-            escapeCsv(item.organizer),
             escapeCsv(item.name),
-            escapeCsv(item.startDate),
-            escapeCsv(item.endDate),
-            escapeCsv(item.isFree),
-            escapeCsv(item.location),
+            escapeCsv(item.address),
+            escapeCsv(item.phone),
+            escapeCsv(item.sitePage),
+            escapeCsv(item.regLink),
+            escapeCsv(item.dates),
             escapeCsv(item.rules),
             escapeCsv(item.prizes),
-            escapeCsv(item.topics),
-            escapeCsv(item.url),
-            escapeCsv(item.source)
+            escapeCsv(item.topics)
         ];
         csvRows.push(row.join(','));
     }
 
+    // إضافة BOM لدعم اللغة العربية في Excel
     return '\ufeff' + csvRows.join('\n');
 }
 
