@@ -84,6 +84,14 @@
         "popularity"
       ],
       "default": "relevance"
+    },
+    "webhookUrl": {
+      "title": "Webhook URL",
+      "description": "The URL to send the results to (e.g. n8n, Zapier)",
+      "type": "string",
+      "editor": "textfield",
+      "format": "uri",
+      "default": ""
     }
   },
   "required": [

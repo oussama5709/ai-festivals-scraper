@@ -23,7 +23,8 @@ Actor.main(async () => {
     const {
         searchRegions = ['worldwide', 'middle-east', 'africa'],
         maxResults = 50,
-        upcomingOnly = true
+        upcomingOnly = true,
+        webhookUrl = ""
     } = input || {};
 
     const dataset = await Actor.openDataset();
@@ -38,31 +39,56 @@ Actor.main(async () => {
     console.log('\n🎪 البحث في المصادر الدولية الأخرى...');
     const otherEvents = await scrapeOtherSources(searchRegions, maxResults);
 
-    const allRawEvents = [...filmFreewayEvents, ...otherEvents];
+    // 3. جمع من انستغرام (جديد)
+    console.log('\n📸 البحث في Instagram (Hashtags)...');
+    const instagramEvents = await scrapeInstagram(maxResults);
 
-    // 3. معالجة وتدقيق البيانات
+    const allRawEvents = [...filmFreewayEvents, ...otherEvents, ...instagramEvents];
+
+    // 4. معالجة وتدقيق البيانات
     console.log('\n🔄 تنظيم وتدقيق البيانات للجدول النهائي...');
     const processedEvents = allRawEvents.map(event => {
-        const category = categorizeEvent(event.name, event.description || '');
+        const category = categorizeEvent(event.name || event.caption, event.description || '');
         return {
-            name: event.name || 'N/A',
+            name: event.name || (event.source === 'Instagram' ? `Post by ${event.username}` : 'N/A'),
             address: event.location || 'Online / Global',
-            phone: event.phone || '', // خانة الهاتف
+            phone: event.phone || '',
             sitePage: event.url,
-            regLink: event.url, // حالياً نفس الرابط
-            dates: `${event.startDate || 'TBD'} - ${event.endDate || 'TBD'}`,
+            regLink: event.url,
+            dates: event.dates || `${event.startDate || 'TBD'} - ${event.endDate || 'TBD'}`,
             rules: event.rules || 'راجع الموقع للتفاصيل',
             prizes: event.prizes || 'لا يوجد معلومات حالياً',
-            topics: event.topics || 'AI, Technology'
+            topics: event.topics || 'AI, Technology',
+            source: event.source || 'Scraper'
         };
-    }).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    }).sort((a, b) => {
+        // ترتيب تقريبي حسب التاريخ
+        const dateA = a.dates.split('-')[0].trim();
+        const dateB = b.dates.split('-')[0].trim();
+        return new Date(dateA) - new Date(dateB);
+    });
 
     // حفظ في Dataset (Cloud)
     for (const event of processedEvents) {
         await dataset.pushData(event);
     }
 
-    // 4. تصدير للـ Excel (CSV) بالتنسيق الجديد المطلوب
+    // 5. إرسال إلى n8n (Webhook) إذا كان متوفراً
+    if (webhookUrl) {
+        console.log(`\n🔗 إرسال البيانات إلى n8n: ${webhookUrl}`);
+        try {
+            await axios.post(webhookUrl, {
+                eventCount: processedEvents.length,
+                data: processedEvents,
+                timestamp: new Date().toISOString()
+            });
+            console.log('✅ تم الإرسال بنجاح!');
+        } catch (err) {
+            console.log(`⚠️ فشل الإرسال للـ Webhook: ${err.message}`);
+        }
+    }
+
+    // 6. تصدير للـ Excel (CSV) بالتنسيق الجديد المطلوب
     try {
         const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
         const csvContent = jsonToProfessionalCsv(processedEvents);
@@ -73,6 +99,58 @@ Actor.main(async () => {
         console.log(`⚠️ فشل تصدير الملف: ${err.message}`);
     }
 });
+
+/**
+ * دالة جمع البيانات من Instagram
+ */
+async function scrapeInstagram(limit) {
+    const events = [];
+    const hashtags = ['aifilmfestival', 'aiartfestival', 'digitalartevents'];
+
+    try {
+        if (process.env.APIFY_IS_AT_HOME) {
+            // استخدام Actor خارجي في السحاب
+            const instagramRun = await Actor.call('apify/instagram-scraper', {
+                hashtags,
+                resultsLimit: limit,
+                proxyConfiguration: { useApifyProxy: true }
+            });
+
+            // تحويل النتائج
+            const results = (await Actor.openDataset(instagramRun.defaultDatasetId)).getData();
+            results.items.forEach(post => {
+                events.push({
+                    name: `Insta: ${post.caption?.slice(0, 30)}...`,
+                    url: `https://www.instagram.com/p/${post.shortCode}`,
+                    username: post.ownerUsername,
+                    description: post.caption,
+                    source: 'Instagram',
+                    location: 'Instagram Post',
+                    dates: 'راجع المنشور',
+                    rules: 'انظر الوصف في انستغرام',
+                    topics: 'AI Art, Festival'
+                });
+            });
+        } else {
+            // بيانات تجريبية محلياً
+            events.push({
+                name: 'Runway AI Film Festival (IG News)',
+                url: 'https://www.instagram.com/runwayapp/',
+                username: 'runwayapp',
+                description: 'Announcing the next AI Film Festival season!',
+                source: 'Instagram',
+                location: 'NYC / Online',
+                dates: 'Spring 2026',
+                rules: 'Submission via link in bio',
+                topics: 'Generative AI Film',
+                prizes: '$60k+ in prizes'
+            });
+        }
+    } catch (err) {
+        console.log(`⚠️ مشكلة في Instagram: ${err.message}`);
+    }
+    return events;
+}
 
 /**
  * دالة جمع البيانات من FilmFreeway
@@ -108,7 +186,7 @@ async function scrapeFilmFreeway(limit) {
                 endDate: date.split('-')[1]?.trim() || 'TBD',
                 source: 'FilmFreeway',
                 organizer: 'FilmFreeway Host',
-                isFree: false, // معظمها بفلوس في FilmFreeway
+                isFree: false,
                 topics: 'AI Cinema, Generative Film',
                 prizes: 'Varies per category',
                 rules: 'Check FilmFreeway submission page'
@@ -116,7 +194,6 @@ async function scrapeFilmFreeway(limit) {
         });
     } catch (err) {
         console.log(`⚠️ مشكلة في FilmFreeway: ${err.message}`);
-        // إضافة بيانات تجريبية في حالة الفشل (Demo)
         events.push({
             name: 'AI International Film Festival Dubai',
             url: 'https://filmfreeway.com/AIFilmFestDubai',
@@ -161,7 +238,7 @@ async function scrapeOtherSources(regions, limit) {
  * تصنيف نوع الحدث
  */
 function categorizeEvent(name, description) {
-    const text = `${name} ${description}`.toLowerCase();
+    const text = `${name || ''} ${description || ''}`.toLowerCase();
     if (text.includes('film') || text.includes('movie') || text.includes('cinema')) return 'ai-film-festival';
     if (text.includes('conference')) return 'conference';
     return 'event';
