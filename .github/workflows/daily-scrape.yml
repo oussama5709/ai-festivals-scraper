@@ -1,0 +1,31 @@
+name: Daily AI Events Scrape
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Every day at 2 AM UTC
+  workflow_dispatch:      # Allow manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Trigger Apify Actor
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          curl -X POST https://api.apify.com/v2/acts/YOUR_ACTOR_ID/runs \
+            -H "Authorization: Bearer $APIFY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "searchRegions": ["worldwide", "middle-east", "africa"],
+              "maxResults": 100,
+              "enableEnrichment": true,
+              "enableAIValidation": true
+            }'
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Scraping failed!"

@@ -1,5 +1,6 @@
-﻿العنوان (Title),الحالة (Status),العنوان/المكان (Address),الهاتف (Phone),الصفحة الرسمية (Site Page),رابط التسجيل (Reg Link),التواريخ (Dates),شروط المسابقة (Rules),الجوائز (Prizes),مواضيع المسابقة (Topics)
-1 Billion Followers Summit 2026,مغلق (Closed),"Dubai, Museum of the Future",,https://www.1billionsummit.com/,https://www.1billionsummit.com/,2026-01-09 - 2026-01-11,Registration open for content creators,Networking & Awards,"Media, AI, Content Creation"
-World Governments Summit - AI Track,مغلق (Closed),"Dubai, Madinat Jumeirah",,https://www.worldgovernmentssummit.org/,https://www.worldgovernmentssummit.org/,2026-02-10 - 2026-02-12,International delegates,لا يوجد معلومات حالياً,"AI Ethics, Governance"
-NeurIPS 2026,مفتوح/منتظر (Open/Upcoming),"Vancouver, Canada",,https://neurips.cc/,https://neurips.cc/,2026-12-10 - 2026-12-16,Academic paper submission,Honorary Awards,"Deep Learning, ML Theory"
-Runway AI Film Festival (IG News),مفتوح/منتظر (Open/Upcoming),NYC / Online,,https://www.instagram.com/runwayapp/,https://www.instagram.com/runwayapp/,2026-04-01 - 2026-04-05,Submission via link in bio,$60k+ in prizes,Generative AI Film
+﻿العنوان (Title),الحالة (Status),التصنيف (Category),السعر (Price),الموعد النهائي (Deadline),العدد المتوقع (Attendees),نقاط الإثراء (Score),تأكيد الذكاء (AI %),العنوان/المكان (Address),الصفحة الرسمية (Website),مواضيع (Topics),المصدر (Source)
+AI International Film Festival Dubai,مفتوح/منتظر (Open/Upcoming),festival (film),$25,2026-03-31,N/A,90,100,"Dubai, UAE",https://filmfreeway.com/AIFilmFestDubai,"AI, Media, Technology",FilmFreeway
+1 Billion Followers Summit 2026,مغلق (Closed),summit,Check Website,N/A,N/A,0,100,"Dubai, Museum of the Future",https://www.1billionsummit.com/,"AI, Media, Technology",Official
+World Governments Summit - AI Track,مغلق (Closed),summit (tech),Check Website,N/A,N/A,0,100,"Dubai, Madinat Jumeirah",https://www.worldgovernmentssummit.org/,"AI, Media, Technology",Official
+NeurIPS 2026,مفتوح/منتظر (Open/Upcoming),event,Check Website,N/A,N/A,0,100,"Vancouver, Canada",https://neurips.cc/,"AI, Media, Technology",Official
+Runway AI Film Festival (IG News),مفتوح/منتظر (Open/Upcoming),festival (film),Check Website,N/A,N/A,0,100,NYC / Online,https://www.instagram.com/runwayapp/,"AI, Media, Technology",Instagram

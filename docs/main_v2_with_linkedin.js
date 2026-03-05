@@ -5,199 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const { gotScraping } = require('got-scraping');
 
-// ====== 🔥 NEW: LINKEDIN RESILIENCE ======
-class LinkedInSelectorManager {
-    static getSelectors() {
-        return {
-            cards: [
-                '.event-card',
-                '[class*="event-card"]',
-                '.reusable-search__result-container',
-                '[data-testid="event-item"]',
-                '[role="listitem"]'
-            ],
-            titles: [
-                'h3',
-                '.entity-result__title-text',
-                '[data-testid="event-title"]',
-                'span[class*="title"]',
-                'a[href*="/events/"]'
-            ],
-            links: [
-                'a[href*="/events/"]',
-                'a.app-aware-link',
-                'a[href*="linkedin.com"]',
-                'a[href*="event"]'
-            ]
-        };
-    }
-
-    static findEvents($, limit) {
-        const events = [];
-        const selectors = this.getSelectors();
-
-        // Try each card selector
-        for (const cardSelector of selectors.cards) {
-            const cards = $(cardSelector);
-            if (cards.length === 0) continue;
-
-            console.log(`  ✅ Found ${cards.length} cards with: ${cardSelector}`);
-
-            cards.each((i, elem) => {
-                if (events.length >= limit) return false;
-
-                let title = '';
-                let link = '';
-
-                // Find title
-                for (const titleSel of selectors.titles) {
-                    const titleElem = $(elem).find(titleSel).first();
-                    if (titleElem.length > 0) {
-                        const text = titleElem.text().trim();
-                        if (text.length > 5) {
-                            title = text;
-                            break;
-                        }
-                    }
-                }
-
-                // Find link
-                for (const linkSel of selectors.links) {
-                    const linkElem = $(elem).find(linkSel).first();
-                    if (linkElem.length > 0) {
-                        const href = linkElem.attr('href');
-                        if (href && (href.includes('event') || href.includes('linkedin'))) {
-                            link = href;
-                            break;
-                        }
-                    }
-                }
-
-                if (title && link && title.length > 5) {
-                    events.push({
-                        title,
-                        link: link.startsWith('http') ? link : `https://www.linkedin.com${link}`
-                    });
-                }
-            });
-
-            if (events.length > 0) break; // Found working selector
-        }
-
-        return events;
-    }
-}
-
-// ====== 🛡️ NEW: ADAPTIVE RATE LIMITER ======
-class AdaptiveRateLimiter {
-    constructor() {
-        this.lastRequest = {};
-        this.failures = {};
-        this.blocked = {};
-    }
-
-    async wait(source) {
-        // Check if temporarily blocked
-        if (this.blocked[source] && Date.now() < this.blocked[source]) {
-            const waitMs = this.blocked[source] - Date.now();
-            console.log(`🚫 ${source} blocked for ${Math.ceil(waitMs / 1000)}s`);
-            await new Promise(r => setTimeout(r, waitMs));
-        }
-
-        const delays = {
-            'LinkedIn': 3500,
-            'Eventbrite': 2200,
-            'Meetup': 1800,
-            'FilmFreeway': 1200,
-            'Instagram': 2500,
-            'default': 1500
-        };
-
-        const baseDelay = delays[source] || delays.default;
-        const failureMultiplier = Math.pow(2, Math.min(this.failures[source] || 0, 3));
-        const jitter = Math.random() * 1500 - 750;
-        const totalDelay = (baseDelay * failureMultiplier) + jitter;
-
-        const lastRequest = this.lastRequest[source] || 0;
-        const elapsed = Date.now() - lastRequest;
-        const waitTime = Math.max(0, totalDelay - elapsed);
-
-        if (waitTime > 200) {
-            console.log(`⏳ ${source}: ${Math.ceil(waitTime)}ms`);
-            await new Promise(r => setTimeout(r, waitTime));
-        }
-
-        this.lastRequest[source] = Date.now();
-    }
-
-    recordSuccess(source) {
-        this.failures[source] = 0;
-        console.log(`✅ ${source} success`);
-    }
-
-    recordFailure(source) {
-        this.failures[source] = (this.failures[source] || 0) + 1;
-        if (this.failures[source] >= 3) {
-            this.blocked[source] = Date.now() + 300000; // Block for 5 minutes
-            console.log(`🚫 ${source} blocked for 5min`);
-        }
-    }
-}
-
-// ====== 📊 NEW: METRICS TRACKER ======
-class ScraperMetrics {
-    constructor() {
-        this.startTime = Date.now();
-        this.sources = {};
-        this.totalEvents = 0;
-    }
-
-    start(source) {
-        return { source, startTime: Date.now(), startMem: process.memoryUsage().heapUsed };
-    }
-
-    end(tracker, eventCount) {
-        const { source, startTime, startMem } = tracker;
-        const duration = Date.now() - startTime;
-        const memUsed = Math.round((process.memoryUsage().heapUsed - startMem) / 1024 / 1024);
-
-        this.sources[source] = {
-            events: eventCount,
-            duration,
-            memory: memUsed,
-            rate: (eventCount / (duration / 1000)).toFixed(2)
-        };
-
-        this.totalEvents += eventCount;
-    }
-
-    report() {
-        const totalTime = Date.now() - this.startTime;
-        const totalMem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-
-        console.log('\n📊 ═════════════════════════════════════════');
-        console.log('📊 FINAL METRICS REPORT');
-        console.log('📊 ═════════════════════════════════════════');
-        console.log(`⏱️  Total Time: ${(totalTime / 1000).toFixed(2)}s`);
-        console.log(`📦 Total Events: ${this.totalEvents}`);
-        console.log(`💾 Memory Used: ${totalMem}MB`);
-        console.log('\n📈 By Source:');
-
-        Object.entries(this.sources).forEach(([source, data]) => {
-            console.log(
-                `  ${source}: ${data.events} events | ` +
-                `${data.duration}ms | ${data.rate} evt/s | ${data.memory}MB`
-            );
-        });
-        console.log('📊 ═════════════════════════════════════════\n');
-    }
-}
-
-// Create instances
-const rateLimiter = new AdaptiveRateLimiter();
-const metrics = new ScraperMetrics();
-
-
 // إعدادات المناطق المتقدمة (Region Configuration)
 const REGION_CONFIG = {
     'worldwide': {
@@ -290,16 +97,31 @@ Actor.main(async () => {
     const dataset = await Actor.openDataset();
     const now = new Date();
 
-    console.log('🚀 AI Festivals Scraper v2.2 (HARDENED)');
-    console.log(`📍 Regions: ${searchRegions.join(', ')}\n`);
+    console.log('🚀 بدء البحث عن مهرجانات وقمم الذكاء الاصطناعي (تحديث 2026)...');
 
-    // Scrapers execution
+    // 1. جمع من FilmFreeway
+    console.log('\n🎬 البحث في FilmFreeway...');
     const filmFreewayEvents = await scrapeFilmFreeway(searchRegions, maxResults);
+
+    // 2. جمع من Eventbrite
+    console.log('\n🎫 البحث في Eventbrite...');
     const eventbriteEvents = await scrapeEventbrite(searchRegions, maxResults);
+
+    // 3. جمع من Meetup
+    console.log('\n🤝 البحث في Meetup...');
     const meetupEvents = await scrapeMeetup(searchRegions, maxResults);
-    const linkedinEvents = await searchLinkedInEvents(searchRegions, maxResults);
-    const otherEvents = await scrapeOtherSources(searchRegions, maxResults);
+
+    // 4. جمع من انستغرام
+    console.log('\n📸 البحث في Instagram...');
     const instagramEvents = await scrapeInstagram(searchRegions, maxResults);
+
+    // 5. بحث في LinkedIn (Phase 6)
+    console.log('\n🔗 البحث في LinkedIn (استراتيجية اكتشاف الفعاليات)...');
+    const linkedinEvents = await searchLinkedInEvents(searchRegions, maxResults);
+
+    // 6. المصادر الأخرى والقمم
+    console.log('\n🎪 البحث في القمم العالمية...');
+    const otherEvents = await scrapeOtherSources(searchRegions, maxResults);
 
     const allRawEvents = [
         ...filmFreewayEvents,
@@ -310,15 +132,12 @@ Actor.main(async () => {
         ...instagramEvents
     ];
 
-    console.log(`\n📊 Collected ${allRawEvents.length} raw events`);
-
-    // Deduplication
+    // 6. محرك منع التكرار (Deduplication - Phase 3)
+    console.log('\n🔐 تصفية التكرار المنطقي...');
     const deduplicator = new EventDeduplicator();
     allRawEvents.forEach(event => deduplicator.addEvent(event));
     const uniqueEvents = deduplicator.getAll();
-
-    console.log(`✅ Deduplicated: ${uniqueEvents.length} unique events`);
-
+    console.log(`✅ نتيجة التكرار: ${allRawEvents.length} -> ${uniqueEvents.length} حدث فريد`);
 
     // 7. إثراء البيانات (Enrichment - Phase 7)
     let enrichedEvents = uniqueEvents;
@@ -410,12 +229,17 @@ Actor.main(async () => {
         }
     }
 
-    // 🔥 ADD THIS - PRINT METRICS
-    metrics.report();
-
-    console.log(`\n✅ DONE! ${processedEvents.length} events exported to CSV`);
+    // 6. تصدير للـ Excel (CSV) بالتنسيق الاحترافي الجديد (يمين ويسار)
+    try {
+        const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
+        const csvContent = jsonToProfessionalCsv(processedEvents);
+        fs.writeFileSync(csvFile, csvContent, 'utf8');
+        console.log(`\n✅ تم بنجاح!`);
+        console.log(`📊 الجدول المنظم جاهز هنا: ${csvFile}`);
+    } catch (err) {
+        console.log(`⚠️ فشل تصدير الملف: ${err.message}`);
+    }
 });
-
 
 /**
  * محرك منع التكرار - يزيل الفعاليات المتكررة من مصادر متعددة
@@ -508,92 +332,39 @@ async function searchLinkedInEvents(regions, limit) {
         : [REGION_CONFIG['worldwide']];
 
     for (const config of regionConfigs) {
-        let tracker = metrics.start('LinkedIn');
         try {
-            await rateLimiter.wait('LinkedIn');
+            const searchResults = await linkedinEventSearch(config, limit);
+            events.push(...searchResults);
 
-            const query = `artificial intelligence event ${config.label}`;
-            console.log(`🔗 LinkedIn: ${config.label}`);
-
-            const response = await gotScraping({
-                url: `https://www.linkedin.com/search/results/events/?keywords=${encodeURIComponent(query)}`,
-                headerGeneratorOptions: {
-                    browsers: [
-                        { name: 'chrome', minVersion: 100, maxVersion: 120 },
-                        { name: 'firefox', minVersion: 100, maxVersion: 120 }
-                    ],
-                    devices: ['desktop', 'mobile'],
-                    operatingSystems: ['windows', 'macos', 'linux']
-                },
-                timeout: 30000
-            });
-
-            const $ = cheerio.load(response.body);
-            const linkedinEvents = LinkedInSelectorManager.findEvents($, limit);
-
-            linkedinEvents.forEach(event => {
-                events.push({
-                    name: event.title,
-                    url: event.link,
-                    source: 'LinkedIn',
-                    region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config) || 'worldwide'
-                });
-            });
-
-            metrics.end(tracker, linkedinEvents.length);
-            rateLimiter.recordSuccess('LinkedIn');
-
-        } catch (error) {
-            rateLimiter.recordFailure('LinkedIn');
-            metrics.end(tracker, 0);
-            console.log(`⚠️  LinkedIn error: ${error.message}`);
+            const companies = LINKEDIN_COMPANIES[Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config)] || [];
+            for (const company of companies.slice(0, 3)) {
+                const companyEvents = await linkedinCompanyEventDiscovery(company, config, limit);
+                events.push(...companyEvents);
+            }
+        } catch (err) {
+            console.log(`⚠️ LinkedIn error: ${err.message}`);
         }
     }
-
-    return events;
+    return events.slice(0, limit);
 }
-
 
 async function linkedinEventSearch(config, limit) {
     const events = [];
     const query = `artificial intelligence event ${config.label}`;
-    const selectors = LinkedInSelectorManager.getSelectors();
-
     try {
         const response = await gotScraping({
             url: `https://www.linkedin.com/search/results/events/?keywords=${encodeURIComponent(query)}`,
             headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
         });
         const $ = cheerio.load(response.body);
-
-        // محاولة البحث باستخدام عدة مسارات (Selectors)
-        let eventElements = [];
-        for (const selector of selectors.cards) {
-            eventElements = $(selector);
-            if (eventElements.length > 0) break;
-        }
-
-        eventElements.each((i, elem) => {
+        $('[class*="event-card"]').each((i, elem) => {
             if (events.length >= limit) return false;
-
-            let name = '';
-            for (const s of selectors.titles) {
-                name = $(elem).find(s).first().text().trim();
-                if (name) break;
-            }
-
-            let link = '';
-            for (const s of selectors.links) {
-                link = $(elem).find(s).first().attr('href');
-                if (link) break;
-            }
-
+            const name = $(elem).find('h3, a[href*="/events/"]').first().text().trim();
+            const link = $(elem).find('a[href*="/events/"]').first().attr('href');
             if (name && link) {
                 events.push({
-                    name,
-                    url: link.startsWith('http') ? link : `https://www.linkedin.com${link}`,
-                    source: 'LinkedIn',
-                    region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config)
+                    name, url: link.startsWith('http') ? link : `https://www.linkedin.com${link}`,
+                    source: 'LinkedIn', region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config)
                 });
             }
         });
@@ -603,42 +374,18 @@ async function linkedinEventSearch(config, limit) {
 
 async function linkedinCompanyEventDiscovery(company, config, limit) {
     const events = [];
-    const selectors = LinkedInSelectorManager.getSelectors();
     try {
         const response = await gotScraping({
             url: `https://www.linkedin.com/company/${company.linkedinId}/`,
             headerGeneratorOptions: { browsers: [{ name: 'chrome' }] }
         });
         const $ = cheerio.load(response.body);
-
-        let eventElements = [];
-        for (const selector of selectors.cards) {
-            eventElements = $(selector);
-            if (eventElements.length > 0) break;
-        }
-
-        eventElements.each((i, elem) => {
+        $('.event-card').each((i, elem) => {
             if (events.length >= limit) return false;
-
-            let name = '';
-            for (const s of selectors.titles) {
-                name = $(elem).find(s).text().trim();
-                if (name) break;
-            }
-
-            let link = '';
-            for (const s of selectors.links) {
-                link = $(elem).find(s).first().attr('href');
-                if (link) break;
-            }
-
+            const name = $(elem).find('h3').text().trim();
+            const link = $(elem).find('a').first().attr('href');
             if (name && link) {
-                events.push({
-                    name: `${name} (${company.name})`,
-                    url: link.startsWith('http') ? link : `https://www.linkedin.com${link}`,
-                    source: 'LinkedIn (Company)',
-                    region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config)
-                });
+                events.push({ name: `${name} (${company.name})`, url: link, source: 'LinkedIn (Company)', region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config) });
             }
         });
     } catch (e) { }
@@ -692,9 +439,7 @@ async function scrapeInstagram(regions, limit) {
 
     const hashtags = [...new Set(regionConfigs.flatMap(c => c.instagramTags))];
 
-    let tracker = metrics.start('Instagram');
     try {
-        await rateLimiter.wait('Instagram');
         if (process.env.APIFY_IS_AT_HOME) {
             const instagramRun = await Actor.call('apify/instagram-scraper', {
                 hashtags,
@@ -726,16 +471,11 @@ async function scrapeInstagram(regions, limit) {
                 region: 'worldwide'
             });
         }
-        rateLimiter.recordSuccess('Instagram');
-        metrics.end(tracker, events.length);
     } catch (err) {
-        rateLimiter.recordFailure('Instagram');
-        metrics.end(tracker, 0);
         console.log(`⚠️ Instagram error: ${err.message}`);
     }
     return events;
 }
-
 
 /**
  * دالة جمع البيانات من FilmFreeway
@@ -747,17 +487,14 @@ async function scrapeFilmFreeway(regions, limit) {
         : [REGION_CONFIG['worldwide']];
 
     for (const config of regionConfigs) {
-        let tracker = metrics.start('FilmFreeway');
         try {
-            await rateLimiter.wait('FilmFreeway');
-            console.log(`🎬 FilmFreeway: ${config.label}`);
+            console.log(`🎬 Scraping FilmFreeway for: ${config.label}`);
             const response = await gotScraping({
                 url: config.filmfreewayUrl,
                 headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
             });
 
             const $ = cheerio.load(response.body);
-            const startCount = events.length;
 
             $('.festival-card').each((i, elem) => {
                 if (events.length >= limit) return false;
@@ -776,12 +513,8 @@ async function scrapeFilmFreeway(regions, limit) {
                     region: Object.keys(REGION_CONFIG).find(key => REGION_CONFIG[key].filmfreewayUrl === config.filmfreewayUrl) || 'worldwide'
                 });
             });
-
-            rateLimiter.recordSuccess('FilmFreeway');
-            metrics.end(tracker, events.length - startCount);
+            await new Promise(r => setTimeout(r, 1000));
         } catch (err) {
-            rateLimiter.recordFailure('FilmFreeway');
-            metrics.end(tracker, 0);
             console.log(`⚠️ FilmFreeway error for ${config.label}: ${err.message}`);
         }
     }
@@ -801,7 +534,6 @@ async function scrapeFilmFreeway(regions, limit) {
     return events;
 }
 
-
 /**
  * جمع البيانات من Eventbrite
  */
@@ -812,18 +544,14 @@ async function scrapeEventbrite(regions, limit) {
         : [REGION_CONFIG['worldwide']];
 
     for (const config of regionConfigs) {
-        let tracker = metrics.start('Eventbrite');
         try {
-            await rateLimiter.wait('Eventbrite');
-            console.log(`🎫 Eventbrite: ${config.label}`);
+            console.log(`🎫 Scraping Eventbrite for: ${config.label}`);
             const response = await gotScraping({
                 url: `https://www.eventbrite.com/d/online/${config.eventbriteSearchTerm}/`,
                 headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
             });
 
             const $ = cheerio.load(response.body);
-            const startCount = events.length;
-
             $('[data-testid="event-card"]').each((i, elem) => {
                 if (events.length >= limit) return false;
                 const name = $(elem).find('[data-testid="event-card-title"]').text().trim();
@@ -840,17 +568,13 @@ async function scrapeEventbrite(regions, limit) {
                     });
                 }
             });
-            rateLimiter.recordSuccess('Eventbrite');
-            metrics.end(tracker, events.length - startCount);
+            await new Promise(r => setTimeout(r, 2000));
         } catch (err) {
-            rateLimiter.recordFailure('Eventbrite');
-            metrics.end(tracker, 0);
             console.log(`⚠️ Eventbrite error for ${config.label}: ${err.message}`);
         }
     }
     return events;
 }
-
 
 /**
  * جمع البيانات من Meetup
@@ -862,18 +586,14 @@ async function scrapeMeetup(regions, limit) {
         : [REGION_CONFIG['worldwide']];
 
     for (const config of regionConfigs) {
-        let tracker = metrics.start('Meetup');
         try {
-            await rateLimiter.wait('Meetup');
-            console.log(`🤝 Meetup: ${config.label}`);
+            console.log(`🤝 Scraping Meetup for: ${config.label}`);
             const response = await gotScraping({
                 url: `https://www.meetup.com/find/?keywords=artificial%20intelligence&location=${config.meetupLocation || 'worldwide'}`,
                 headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
             });
 
             const $ = cheerio.load(response.body);
-            const startCount = events.length;
-
             $('[data-testid="eventCard"]').each((i, elem) => {
                 if (events.length >= limit) return false;
                 const name = $(elem).find('h3').text().trim();
@@ -883,17 +603,13 @@ async function scrapeMeetup(regions, limit) {
                     events.push({ name, url: fullUrl, source: 'Meetup', region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k].meetupLocation === config.meetupLocation) });
                 }
             });
-            rateLimiter.recordSuccess('Meetup');
-            metrics.end(tracker, events.length - startCount);
+            await new Promise(r => setTimeout(r, 1500));
         } catch (err) {
-            rateLimiter.recordFailure('Meetup');
-            metrics.end(tracker, 0);
             console.log(`⚠️ Meetup error: ${err.message}`);
         }
     }
     return events;
 }
-
 
 /**
  * Helpers لتنسيق التواريخ

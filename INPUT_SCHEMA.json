@@ -86,6 +86,20 @@
       ],
       "default": "relevance"
     },
+    "enableEnrichment": {
+      "title": "Enable Data Enrichment",
+      "description": "Extract additional data like ticket prices and deadlines (slower)",
+      "type": "boolean",
+      "editor": "checkbox",
+      "default": true
+    },
+    "enableAIValidation": {
+      "title": "Enable AI Validation",
+      "description": "Use AI to verify if event is truly AI-related (requires ANTHROPIC_API_KEY)",
+      "type": "boolean",
+      "editor": "checkbox",
+      "default": true
+    },
     "webhookUrl": {
       "title": "Webhook URL",
       "description": "The URL to send the results to (e.g. n8n, Zapier)",
