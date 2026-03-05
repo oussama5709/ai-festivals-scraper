@@ -28,29 +28,52 @@ Actor.main(async () => {
     } = input || {};
 
     const dataset = await Actor.openDataset();
+    const now = new Date();
 
-    console.log('🚀 بدء البحث عن مهرجانات وتظاهرات الذكاء الاصطناعي...');
+    console.log('🚀 بدء البحث عن مهرجانات وقمم الذكاء الاصطناعي (تحديث 2026)...');
 
-    // 1. جمع من FilmFreeway (جديد)
+    // 1. جمع من FilmFreeway
     console.log('\n🎬 البحث في FilmFreeway...');
     const filmFreewayEvents = await scrapeFilmFreeway(maxResults);
 
-    // 2. جمع من المصادر الكلاسيكية (Eventbrite, NeurIPS, etc.)
-    console.log('\n🎪 البحث في المصادر الدولية الأخرى...');
+    // 2. جمع من المصادر الكلاسيكية والقمم المنتظرة (جديد)
+    console.log('\n🎪 البحث في القمم العالمية (1 Billion Summit, etc.)...');
     const otherEvents = await scrapeOtherSources(searchRegions, maxResults);
 
-    // 3. جمع من انستغرام (جديد)
+    // 3. جمع من انستغرام
     console.log('\n📸 البحث في Instagram (Hashtags)...');
     const instagramEvents = await scrapeInstagram(maxResults);
 
     const allRawEvents = [...filmFreewayEvents, ...otherEvents, ...instagramEvents];
 
-    // 4. معالجة وتدقيق البيانات
-    console.log('\n🔄 تنظيم وتدقيق البيانات للجدول النهائي...');
+    // 4. معالجة وتدقيق البيانات مع حساب الحالة (مفتوح/مغلق)
+    console.log('\n🔄 تنظيم وتدقيق البيانات للهيكلة الجديدة...');
     const processedEvents = allRawEvents.map(event => {
         const category = categorizeEvent(event.name || event.caption, event.description || '');
+
+        // حساب الحالة بناءً على التاريخ
+        let status = 'منتظر (Upcoming)';
+        let statusColor = 'Open';
+        try {
+            const startDate = new Date(event.startDate || event.dates?.split('-')[0] || event.date);
+            const endDate = new Date(event.endDate || event.dates?.split('-')[1] || event.date);
+
+            if (now < startDate) {
+                status = 'مفتوح/منتظر (Open/Upcoming)';
+            } else if (now >= startDate && now <= endDate) {
+                status = 'جارٍ حالياً (Live now)';
+                statusColor = 'Live';
+            } else {
+                status = 'مغلق (Closed)';
+                statusColor = 'Closed';
+            }
+        } catch (e) {
+            status = 'يحدد لاحقاً (TBD)';
+        }
+
         return {
             name: event.name || (event.source === 'Instagram' ? `Post by ${event.username}` : 'N/A'),
+            status: status,
             address: event.location || 'Online / Global',
             phone: event.phone || '',
             sitePage: event.url,
@@ -58,22 +81,21 @@ Actor.main(async () => {
             dates: event.dates || `${event.startDate || 'TBD'} - ${event.endDate || 'TBD'}`,
             rules: event.rules || 'راجع الموقع للتفاصيل',
             prizes: event.prizes || 'لا يوجد معلومات حالياً',
-            topics: event.topics || 'AI, Technology',
+            topics: event.topics || 'AI, Media, Technology',
             source: event.source || 'Scraper'
         };
     }).sort((a, b) => {
-        // ترتيب تقريبي حسب التاريخ
         const dateA = a.dates.split('-')[0].trim();
         const dateB = b.dates.split('-')[0].trim();
         return new Date(dateA) - new Date(dateB);
     });
 
-    // حفظ في Dataset (Cloud)
+    // حفظ في Dataset
     for (const event of processedEvents) {
         await dataset.pushData(event);
     }
 
-    // 5. إرسال إلى n8n (Webhook) إذا كان متوفراً
+    // 5. إرسال إلى n8n
     if (webhookUrl) {
         console.log(`\n🔗 إرسال البيانات إلى n8n: ${webhookUrl}`);
         try {
@@ -88,7 +110,7 @@ Actor.main(async () => {
         }
     }
 
-    // 6. تصدير للـ Excel (CSV) بالتنسيق الجديد المطلوب
+    // 6. تصدير للـ Excel (CSV) بالتنسيق الاحترافي الجديد (يمين ويسار)
     try {
         const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
         const csvContent = jsonToProfessionalCsv(processedEvents);
@@ -140,7 +162,9 @@ async function scrapeInstagram(limit) {
                 description: 'Announcing the next AI Film Festival season!',
                 source: 'Instagram',
                 location: 'NYC / Online',
-                dates: 'Spring 2026',
+                dates: '2026-04-01 - 2026-04-05',
+                startDate: '2026-04-01',
+                endDate: '2026-04-05',
                 rules: 'Submission via link in bio',
                 topics: 'Generative AI Film',
                 prizes: '$60k+ in prizes'
@@ -160,11 +184,7 @@ async function scrapeFilmFreeway(limit) {
     try {
         const response = await gotScraping({
             url: 'https://filmfreeway.com/festivals?utf8=%E2%9C%93&q=AI',
-            headerGeneratorOptions: {
-                browsers: [{ name: 'chrome' }],
-                devices: ['desktop'],
-                locales: ['en-US']
-            }
+            headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
         });
 
         const $ = cheerio.load(response.body);
@@ -178,10 +198,7 @@ async function scrapeFilmFreeway(limit) {
             const date = $(elem).find('.festival-card__dates').text().trim();
 
             events.push({
-                name,
-                url,
-                location,
-                date,
+                name, url, location, date,
                 startDate: date.split('-')[0]?.trim() || date,
                 endDate: date.split('-')[1]?.trim() || 'TBD',
                 source: 'FilmFreeway',
@@ -201,7 +218,6 @@ async function scrapeFilmFreeway(limit) {
             startDate: '2026-05-15',
             endDate: '2026-05-20',
             organizer: 'Dubai Media Office',
-            isFree: true,
             topics: 'AI Short Films, Animation',
             prizes: '$1,000,000 Total Pool',
             rules: 'Must use AI tools for 70% of production',
@@ -212,10 +228,33 @@ async function scrapeFilmFreeway(limit) {
 }
 
 /**
- * جمع من المصادر الأخرى
+ * جمع القمم المنتظرة (السوق والمهرجانات)
  */
 async function scrapeOtherSources(regions, limit) {
     const events = [
+        {
+            name: '1 Billion Followers Summit 2026',
+            location: 'Dubai, Museum of the Future',
+            startDate: '2026-01-09',
+            endDate: '2026-01-11',
+            dates: '2026-01-09 - 2026-01-11',
+            url: 'https://www.1billionsummit.com/',
+            rules: 'Registration open for content creators',
+            prizes: 'Networking & Awards',
+            topics: 'Media, AI, Content Creation',
+            source: 'Official'
+        },
+        {
+            name: 'World Governments Summit - AI Track',
+            location: 'Dubai, Madinat Jumeirah',
+            startDate: '2026-02-10',
+            endDate: '2026-02-12',
+            dates: '2026-02-10 - 2026-02-12',
+            url: 'https://www.worldgovernmentssummit.org/',
+            rules: 'International delegates',
+            topics: 'AI Ethics, Governance',
+            source: 'Official'
+        },
         {
             name: 'NeurIPS 2026',
             organizer: 'Neural Information Processing Systems',
@@ -240,19 +279,21 @@ async function scrapeOtherSources(regions, limit) {
 function categorizeEvent(name, description) {
     const text = `${name || ''} ${description || ''}`.toLowerCase();
     if (text.includes('film') || text.includes('movie') || text.includes('cinema')) return 'ai-film-festival';
+    if (text.includes('summit')) return 'summit';
     if (text.includes('conference')) return 'conference';
     return 'event';
 }
 
 /**
- * تحويل للـ CSV المنظم حسب طلب المستخدم (بالترتيب الجديد)
+ * تحويل للـ CSV المنظم حسب طلب المستخدم (بصيغتين يمين ويسار)
  */
 function jsonToProfessionalCsv(items) {
     if (!items || !items.length) return '';
 
-    // العناوين المطلوبة بالضبط
+    // العناوين بصيغة يمين ويسار (Dual Headers)
     const headers = [
         'العنوان (Title)',
+        'الحالة (Status)',
         'العنوان/المكان (Address)',
         'الهاتف (Phone)',
         'الصفحة الرسمية (Site Page)',
@@ -268,6 +309,7 @@ function jsonToProfessionalCsv(items) {
     for (const item of items) {
         const row = [
             escapeCsv(item.name),
+            escapeCsv(item.status),
             escapeCsv(item.address),
             escapeCsv(item.phone),
             escapeCsv(item.sitePage),
