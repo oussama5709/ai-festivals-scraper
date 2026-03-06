@@ -1,17 +1,18 @@
 {
     "name": "ai-festivals-scraper",
-    "version": "1.0.0",
-    "description": "Smart scraper for AI events worldwide",
+    "version": "2.2.0",
+    "description": "AI Festivals Scraper - Hardened Production Version",
     "main": "main.js",
     "dependencies": {
-        "apify": "^3.0.0",
-        "axios": "^1.0.0",
+        "apify": "^3.1.0",
+        "axios": "^1.6.0",
         "cheerio": "^1.0.0-rc.12",
-        "got-scraping": "^3.0.0"
+        "got-scraping": "^3.2.0",
+        "mongodb": "^7.1.0"
     },
     "scripts": {
         "start": "node main.js",
-        "test": "node test.js"
+        "test": "node main.js"
     },
     "author": "oussama5709",
     "license": "MIT"

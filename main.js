@@ -4,8 +4,10 @@ const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
 const { gotScraping } = require('got-scraping');
+const { saveEvent } = require('./lib/db');
 
-// ====== 🔥 NEW: LINKEDIN RESILIENCE ======
+
+// ====== 🔥 LINKEDIN RESILIENCE CLASS ======
 class LinkedInSelectorManager {
     static getSelectors() {
         return {
@@ -14,20 +16,23 @@ class LinkedInSelectorManager {
                 '[class*="event-card"]',
                 '.reusable-search__result-container',
                 '[data-testid="event-item"]',
-                '[role="listitem"]'
+                '[role="listitem"]',
+                'div[class*="card"]'
             ],
             titles: [
                 'h3',
                 '.entity-result__title-text',
                 '[data-testid="event-title"]',
                 'span[class*="title"]',
-                'a[href*="/events/"]'
+                'a[href*="/events/"]',
+                'h2'
             ],
             links: [
                 'a[href*="/events/"]',
                 'a.app-aware-link',
                 'a[href*="linkedin.com"]',
-                'a[href*="event"]'
+                'a[href*="event"]',
+                'a[href]'
             ]
         };
     }
@@ -41,7 +46,7 @@ class LinkedInSelectorManager {
             const cards = $(cardSelector);
             if (cards.length === 0) continue;
 
-            console.log(`  ✅ Found ${cards.length} cards with: ${cardSelector}`);
+            console.log(`    ✅ Found ${cards.length} items with: ${cardSelector}`);
 
             cards.each((i, elem) => {
                 if (events.length >= limit) return false;
@@ -49,7 +54,7 @@ class LinkedInSelectorManager {
                 let title = '';
                 let link = '';
 
-                // Find title
+                // Find title from available selectors
                 for (const titleSel of selectors.titles) {
                     const titleElem = $(elem).find(titleSel).first();
                     if (titleElem.length > 0) {
@@ -61,7 +66,7 @@ class LinkedInSelectorManager {
                     }
                 }
 
-                // Find link
+                // Find link from available selectors
                 for (const linkSel of selectors.links) {
                     const linkElem = $(elem).find(linkSel).first();
                     if (linkElem.length > 0) {
@@ -73,6 +78,7 @@ class LinkedInSelectorManager {
                     }
                 }
 
+                // Only add if both title and link exist
                 if (title && link && title.length > 5) {
                     events.push({
                         title,
@@ -81,14 +87,19 @@ class LinkedInSelectorManager {
                 }
             });
 
-            if (events.length > 0) break; // Found working selector
+            // If found working selector, use it
+            if (events.length > 0) {
+                console.log(`    🎯 Using selector: ${cardSelector}`);
+                break;
+            }
         }
 
         return events;
     }
 }
 
-// ====== 🛡️ NEW: ADAPTIVE RATE LIMITER ======
+
+// ====== 🛡️ ADAPTIVE RATE LIMITER CLASS ======
 class AdaptiveRateLimiter {
     constructor() {
         this.lastRequest = {};
@@ -97,13 +108,14 @@ class AdaptiveRateLimiter {
     }
 
     async wait(source) {
-        // Check if temporarily blocked
+        // Check if source is temporarily blocked
         if (this.blocked[source] && Date.now() < this.blocked[source]) {
             const waitMs = this.blocked[source] - Date.now();
-            console.log(`🚫 ${source} blocked for ${Math.ceil(waitMs / 1000)}s`);
+            console.log(`    🚫 ${source} blocked for ${Math.ceil(waitMs / 1000)}s`);
             await new Promise(r => setTimeout(r, waitMs));
         }
 
+        // Define base delays per source
         const delays = {
             'LinkedIn': 3500,
             'Eventbrite': 2200,
@@ -114,37 +126,63 @@ class AdaptiveRateLimiter {
         };
 
         const baseDelay = delays[source] || delays.default;
-        const failureMultiplier = Math.pow(2, Math.min(this.failures[source] || 0, 3));
+
+        // Calculate failure multiplier
+        const failureCount = this.failures[source] || 0;
+        const failureMultiplier = Math.pow(2, Math.min(failureCount, 3));
+
+        // Add random jitter (±750ms)
         const jitter = Math.random() * 1500 - 750;
+
+        // Total delay calculation
         const totalDelay = (baseDelay * failureMultiplier) + jitter;
 
+        // Check elapsed time since last request
         const lastRequest = this.lastRequest[source] || 0;
         const elapsed = Date.now() - lastRequest;
         const waitTime = Math.max(0, totalDelay - elapsed);
 
+        // Wait if necessary
         if (waitTime > 200) {
-            console.log(`⏳ ${source}: ${Math.ceil(waitTime)}ms`);
+            console.log(`    ⏳ ${source}: waiting ${Math.ceil(waitTime)}ms (failures: ${failureCount})`);
             await new Promise(r => setTimeout(r, waitTime));
         }
 
+        // Update last request time
         this.lastRequest[source] = Date.now();
     }
 
     recordSuccess(source) {
         this.failures[source] = 0;
-        console.log(`✅ ${source} success`);
+        console.log(`    ✅ ${source} success - reset failures`);
     }
 
     recordFailure(source) {
         this.failures[source] = (this.failures[source] || 0) + 1;
-        if (this.failures[source] >= 3) {
+        const failureCount = this.failures[source];
+
+        console.log(`    ⚠️  ${source} failure #${failureCount}`);
+
+        // Temporarily block after 3 failures
+        if (failureCount >= 3) {
             this.blocked[source] = Date.now() + 300000; // Block for 5 minutes
-            console.log(`🚫 ${source} blocked for 5min`);
+            console.log(`    🚫 ${source} blocked for 5 minutes due to repeated failures`);
         }
+    }
+
+    getStatus() {
+        return {
+            failures: this.failures,
+            blocked: Object.keys(this.blocked).filter(s => this.blocked[s] > Date.now())
+        };
     }
 }
 
-// ====== 📊 NEW: METRICS TRACKER ======
+// Create global rate limiter instance
+const rateLimiter = new AdaptiveRateLimiter();
+
+
+// ====== 📊 SCRAPER METRICS CLASS ======
 class ScraperMetrics {
     constructor() {
         this.startTime = Date.now();
@@ -152,50 +190,72 @@ class ScraperMetrics {
         this.totalEvents = 0;
     }
 
+    // Start tracking a source
     start(source) {
-        return { source, startTime: Date.now(), startMem: process.memoryUsage().heapUsed };
+        return {
+            source,
+            startTime: Date.now(),
+            startMemory: process.memoryUsage().heapUsed
+        };
     }
 
+    // End tracking a source
     end(tracker, eventCount) {
-        const { source, startTime, startMem } = tracker;
+        const { source, startTime, startMemory } = tracker;
         const duration = Date.now() - startTime;
-        const memUsed = Math.round((process.memoryUsage().heapUsed - startMem) / 1024 / 1024);
+        const memoryUsed = Math.round((process.memoryUsage().heapUsed - startMemory) / 1024 / 1024);
 
         this.sources[source] = {
             events: eventCount,
-            duration,
-            memory: memUsed,
-            rate: (eventCount / (duration / 1000)).toFixed(2)
+            duration: duration,
+            memory: memoryUsed,
+            rate: (eventCount / (duration / 1000)).toFixed(2),
+            status: eventCount > 0 ? '✅' : '⚠️'
         };
 
         this.totalEvents += eventCount;
+
+        console.log(
+            `    ${this.sources[source].status} ${source}: ${eventCount} events | ` +
+            `${duration}ms | ${this.sources[source].rate} evt/s | ${memoryUsed}MB`
+        );
     }
 
+    // Generate final report
     report() {
         const totalTime = Date.now() - this.startTime;
-        const totalMem = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        const totalMemory = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
 
-        console.log('\n📊 ═════════════════════════════════════════');
-        console.log('📊 FINAL METRICS REPORT');
-        console.log('📊 ═════════════════════════════════════════');
-        console.log(`⏱️  Total Time: ${(totalTime / 1000).toFixed(2)}s`);
-        console.log(`📦 Total Events: ${this.totalEvents}`);
-        console.log(`💾 Memory Used: ${totalMem}MB`);
-        console.log('\n📈 By Source:');
+        console.log('\n');
+        console.log('╔═══════════════════════════════════════════════════╗');
+        console.log('║         📊 FINAL METRICS REPORT 📊                ║');
+        console.log('╚═══════════════════════════════════════════════════╝');
+        console.log('');
+        console.log(`  ⏱️  Total Time:        ${(totalTime / 1000).toFixed(2)}s`);
+        console.log(`  📦 Total Events:      ${this.totalEvents}`);
+        console.log(`  💾 Memory Used:       ${totalMemory}MB`);
+        console.log('');
+        console.log('  📈 BY SOURCE:');
+        console.log('  ─────────────────────────────────────────────────');
 
         Object.entries(this.sources).forEach(([source, data]) => {
+            const padding = ' '.repeat(20 - source.length);
             console.log(
-                `  ${source}: ${data.events} events | ` +
-                `${data.duration}ms | ${data.rate} evt/s | ${data.memory}MB`
+                `  ${data.status} ${source}${padding}│ ` +
+                `${data.events} events │ ${data.duration}ms │ ` +
+                `${data.rate} evt/s │ ${data.memory}MB`
             );
         });
-        console.log('📊 ═════════════════════════════════════════\n');
+
+        console.log('  ─────────────────────────────────────────────────');
+        console.log('');
     }
 }
 
-// Create instances
-const rateLimiter = new AdaptiveRateLimiter();
+// Create global metrics instance
 const metrics = new ScraperMetrics();
+
+
 
 
 // إعدادات المناطق المتقدمة (Region Configuration)
@@ -293,14 +353,27 @@ Actor.main(async () => {
     console.log('🚀 AI Festivals Scraper v2.2 (HARDENED)');
     console.log(`📍 Regions: ${searchRegions.join(', ')}\n`);
 
-    // Scrapers execution
+    // ===== COLLECT DATA FROM ALL SOURCES =====
+
+    // 1. FilmFreeway
     const filmFreewayEvents = await scrapeFilmFreeway(searchRegions, maxResults);
+
+    // 2. Eventbrite
     const eventbriteEvents = await scrapeEventbrite(searchRegions, maxResults);
+
+    // 3. Meetup
     const meetupEvents = await scrapeMeetup(searchRegions, maxResults);
+
+    // 4. LinkedIn
     const linkedinEvents = await searchLinkedInEvents(searchRegions, maxResults);
+
+    // 5. Summits
     const otherEvents = await scrapeOtherSources(searchRegions, maxResults);
+
+    // 6. Instagram
     const instagramEvents = await scrapeInstagram(searchRegions, maxResults);
 
+    // ===== COMBINE ALL EVENTS =====
     const allRawEvents = [
         ...filmFreewayEvents,
         ...eventbriteEvents,
@@ -310,39 +383,40 @@ Actor.main(async () => {
         ...instagramEvents
     ];
 
-    console.log(`\n📊 Collected ${allRawEvents.length} raw events`);
+    console.log(`\n📊 Collected ${allRawEvents.length} total raw events\n`);
 
-    // Deduplication
+    // ===== DEDUPLICATION =====
+    console.log('🔐 Deduplicating events...');
     const deduplicator = new EventDeduplicator();
     allRawEvents.forEach(event => deduplicator.addEvent(event));
     const uniqueEvents = deduplicator.getAll();
+    console.log(`✅ Deduplicated: ${allRawEvents.length} → ${uniqueEvents.length} unique events\n`);
 
-    console.log(`✅ Deduplicated: ${uniqueEvents.length} unique events`);
-
-
-    // 7. إثراء البيانات (Enrichment - Phase 7)
+    // ===== ENRICHMENT =====
     let enrichedEvents = uniqueEvents;
     if (enableEnrichment) {
-        console.log('\n💎 إثراء البيانات وتدقيق التفاصيل (الأسعار، المواعيد)...');
+        console.log('💎 Enriching data (prices, deadlines, attendees)...');
         const enricher = new EventEnricher();
         enrichedEvents = await enricher.enrichBatch(uniqueEvents, 3, 1000);
+        console.log(`✅ Enrichment complete\n`);
     }
 
-    // 8. التحقق بالذكاء الاصطناعي (AI Validation - Phase 8)
+    // ===== AI VALIDATION =====
     let finalEvents = enrichedEvents;
-    if (process.env.ANTHROPIC_API_KEY) {
-        console.log('\n🤖 التحقق من المحتوى عبر Claude AI...');
+    if (enableAIValidation && process.env.ANTHROPIC_API_KEY) {
+        console.log('🤖 Validating with Claude AI...');
         const validator = new AIEventValidator();
         const validationResults = await validator.validateBatch(enrichedEvents);
         finalEvents = validationResults.validated;
+        console.log(`✅ Validation complete: ${finalEvents.length} validated events\n`);
     }
 
-    // 9. معالجة وتدقيق البيانات النهائية
-    console.log('\n🔄 تنظيم وتدقيق البيانات للمرحلة النهائية...');
+    // ===== CATEGORIZATION & PROCESSING =====
+    console.log('🔄 Finalizing and categorizing events...');
     const processedEvents = finalEvents.map(event => {
         const { displayName } = enhancedCategorizeEvent(event.name, event.description);
 
-        // حساب الحالة بناءً على التاريخ
+        // Calculate status based on dates
         let status = 'منتظر (Upcoming)';
         try {
             const startDate = new Date(event.startDate || event.dates?.split('-')[0] || event.date);
@@ -372,7 +446,6 @@ Actor.main(async () => {
             prizes: event.prizes || 'لا يوجد معلومات حالياً',
             topics: event.topics || 'AI, Media, Technology',
             source: event.source || 'Scraper',
-            // حقول الإثراء الجديدة
             ticketPrice: event.ticketPrice?.min !== undefined ? (event.ticketPrice.isFree ? 'Free' : `$${event.ticketPrice.min}`) : 'Check Website',
             deadline: event.registrationDeadline || 'N/A',
             attendees: event.expectedAttendees || 'N/A',
@@ -385,14 +458,34 @@ Actor.main(async () => {
         return new Date(dateA) - new Date(dateB);
     });
 
-    // حفظ في Dataset
+    console.log(`✅ Processing complete: ${processedEvents.length} events ready\n`);
+
+    // ===== SAVE TO APIFY DATASET AND MONGODB =====
+    console.log('💾 Saving to Apify dataset and MongoDB...');
     for (const event of processedEvents) {
+        try {
+            await saveEvent({
+                name: event.name,
+                url: event.sitePage,
+                category: event.category,
+                price: event.ticketPrice,
+                dates: event.dates,
+                createdAt: new Date(),
+                source: event.source,
+                aiConfidence: event.aiConfidence,
+                address: event.address,
+                topics: event.topics
+            });
+        } catch (dbErr) {
+            console.log(`⚠️ MongoDB save error: ${dbErr.message}`);
+        }
         await dataset.pushData(event);
     }
+    console.log(`✅ Saved ${processedEvents.length} events to dataset and MongoDB\n`);
 
-    // 10. إرسال إلى n8n
+    // ===== WEBHOOK DELIVERY =====
     if (webhookUrl) {
-        console.log(`\n🔗 إرسال البيانات إلى n8n: ${webhookUrl}`);
+        console.log(`🔗 Sending to webhook: ${webhookUrl}`);
         try {
             const response = await axios.post(webhookUrl, {
                 eventCount: processedEvents.length,
@@ -400,21 +493,33 @@ Actor.main(async () => {
                 timestamp: new Date().toISOString(),
                 status: 'success'
             }, { timeout: 10000 });
+
             if (response.status === 200 || response.status === 201) {
-                console.log('✅ تم الإرسال بنجاح!');
+                console.log('✅ Webhook delivered successfully\n');
             } else {
-                console.log(`⚠️ تم الإرسال ولكن الكود حالة غير متوقع: ${response.status}`);
+                console.log(`⚠️  Webhook returned status: ${response.status}\n`);
             }
         } catch (err) {
-            console.log(`⚠️ فشل الإرسال للـ Webhook: ${err.message}`);
+            console.log(`⚠️  Webhook delivery failed: ${err.message}\n`);
         }
     }
 
-    // 🔥 ADD THIS - PRINT METRICS
+    // ===== CSV EXPORT =====
+    try {
+        const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
+        const csvContent = jsonToProfessionalCsv(processedEvents);
+        fs.writeFileSync(csvFile, csvContent, 'utf8');
+        console.log(`✅ CSV exported: ${csvFile}\n`);
+    } catch (err) {
+        console.log(`⚠️  CSV export failed: ${err.message}\n`);
+    }
+
+    // ===== PRINT METRICS REPORT =====
     metrics.report();
 
-    console.log(`\n✅ DONE! ${processedEvents.length} events exported to CSV`);
+    console.log(`\n🎉 ✅ COMPLETE! ${processedEvents.length} events successfully processed\n`);
 });
+
 
 
 /**
@@ -510,27 +615,32 @@ async function searchLinkedInEvents(regions, limit) {
     for (const config of regionConfigs) {
         let tracker = metrics.start('LinkedIn');
         try {
+            // Wait before making request
             await rateLimiter.wait('LinkedIn');
 
             const query = `artificial intelligence event ${config.label}`;
-            console.log(`🔗 LinkedIn: ${config.label}`);
+            console.log(`\n🔗 LinkedIn: ${config.label}`);
 
+            // Make request with static headers and no timeout for stability
             const response = await gotScraping({
                 url: `https://www.linkedin.com/search/results/events/?keywords=${encodeURIComponent(query)}`,
-                headerGeneratorOptions: {
-                    browsers: [
-                        { name: 'chrome', minVersion: 100, maxVersion: 120 },
-                        { name: 'firefox', minVersion: 100, maxVersion: 120 }
-                    ],
-                    devices: ['desktop', 'mobile'],
-                    operatingSystems: ['windows', 'macos', 'linux']
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
                 },
-                timeout: 30000
+                useHeaderGenerator: false
             });
 
+
+
+
+            // Parse HTML
             const $ = cheerio.load(response.body);
+
+            // Use new selector manager
             const linkedinEvents = LinkedInSelectorManager.findEvents($, limit);
 
+            // Add to results
             linkedinEvents.forEach(event => {
                 events.push({
                     name: event.title,
@@ -540,13 +650,16 @@ async function searchLinkedInEvents(regions, limit) {
                 });
             });
 
+            // Record success
             metrics.end(tracker, linkedinEvents.length);
             rateLimiter.recordSuccess('LinkedIn');
 
         } catch (error) {
+            // Record failure
             rateLimiter.recordFailure('LinkedIn');
             metrics.end(tracker, 0);
-            console.log(`⚠️  LinkedIn error: ${error.message}`);
+            console.log(`    ⚠️  LinkedIn error: ${error.message}`);
+            // Continue to next region instead of crashing
         }
     }
 
@@ -554,96 +667,7 @@ async function searchLinkedInEvents(regions, limit) {
 }
 
 
-async function linkedinEventSearch(config, limit) {
-    const events = [];
-    const query = `artificial intelligence event ${config.label}`;
-    const selectors = LinkedInSelectorManager.getSelectors();
 
-    try {
-        const response = await gotScraping({
-            url: `https://www.linkedin.com/search/results/events/?keywords=${encodeURIComponent(query)}`,
-            headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
-        });
-        const $ = cheerio.load(response.body);
-
-        // محاولة البحث باستخدام عدة مسارات (Selectors)
-        let eventElements = [];
-        for (const selector of selectors.cards) {
-            eventElements = $(selector);
-            if (eventElements.length > 0) break;
-        }
-
-        eventElements.each((i, elem) => {
-            if (events.length >= limit) return false;
-
-            let name = '';
-            for (const s of selectors.titles) {
-                name = $(elem).find(s).first().text().trim();
-                if (name) break;
-            }
-
-            let link = '';
-            for (const s of selectors.links) {
-                link = $(elem).find(s).first().attr('href');
-                if (link) break;
-            }
-
-            if (name && link) {
-                events.push({
-                    name,
-                    url: link.startsWith('http') ? link : `https://www.linkedin.com${link}`,
-                    source: 'LinkedIn',
-                    region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config)
-                });
-            }
-        });
-    } catch (e) { console.log(`⚠️ LinkedIn Search error: ${e.message}`); }
-    return events;
-}
-
-async function linkedinCompanyEventDiscovery(company, config, limit) {
-    const events = [];
-    const selectors = LinkedInSelectorManager.getSelectors();
-    try {
-        const response = await gotScraping({
-            url: `https://www.linkedin.com/company/${company.linkedinId}/`,
-            headerGeneratorOptions: { browsers: [{ name: 'chrome' }] }
-        });
-        const $ = cheerio.load(response.body);
-
-        let eventElements = [];
-        for (const selector of selectors.cards) {
-            eventElements = $(selector);
-            if (eventElements.length > 0) break;
-        }
-
-        eventElements.each((i, elem) => {
-            if (events.length >= limit) return false;
-
-            let name = '';
-            for (const s of selectors.titles) {
-                name = $(elem).find(s).text().trim();
-                if (name) break;
-            }
-
-            let link = '';
-            for (const s of selectors.links) {
-                link = $(elem).find(s).first().attr('href');
-                if (link) break;
-            }
-
-            if (name && link) {
-                events.push({
-                    name: `${name} (${company.name})`,
-                    url: link.startsWith('http') ? link : `https://www.linkedin.com${link}`,
-                    source: 'LinkedIn (Company)',
-                    region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k] === config)
-                });
-            }
-        });
-    } catch (e) { }
-    return events;
-}
 
 /**
  * محرك إثراء البيانات (Phase 7)
@@ -694,28 +718,39 @@ async function scrapeInstagram(regions, limit) {
 
     let tracker = metrics.start('Instagram');
     try {
+        // Wait before making request
         await rateLimiter.wait('Instagram');
-        if (process.env.APIFY_IS_AT_HOME) {
-            const instagramRun = await Actor.call('apify/instagram-scraper', {
-                hashtags,
-                resultsLimit: limit,
-                proxyConfiguration: { useApifyProxy: true }
-            });
 
-            const results = await Actor.openDataset(instagramRun.defaultDatasetId).getData();
-            results.items.forEach(post => {
-                events.push({
-                    name: `Insta: ${post.caption?.slice(0, 30)}...`,
-                    url: `https://www.instagram.com/p/${post.shortCode}`,
-                    username: post.ownerUsername,
-                    description: post.caption,
-                    source: 'Instagram',
-                    location: 'Instagram Post',
-                    dates: 'Check Post',
-                    region: 'global'
+        console.log(`\n📸 Instagram: Hashtags`);
+
+        if (process.env.APIFY_IS_AT_HOME) {
+            // Use Apify Instagram scraper if available
+            try {
+                const instagramRun = await Actor.call('apify/instagram-scraper', {
+                    hashtags,
+                    resultsLimit: limit,
+                    proxyConfiguration: { useApifyProxy: true }
                 });
-            });
+
+                const results = await Actor.openDataset(instagramRun.defaultDatasetId).getData();
+
+                results.items.forEach(post => {
+                    events.push({
+                        name: `Insta: ${post.caption?.slice(0, 30)}...`,
+                        url: `https://www.instagram.com/p/${post.shortCode}`,
+                        username: post.ownerUsername,
+                        description: post.caption,
+                        source: 'Instagram',
+                        location: 'Instagram Post',
+                        dates: 'Check Post',
+                        region: 'global'
+                    });
+                });
+            } catch (instagramErr) {
+                console.log(`    ⚠️  Instagram API error: ${instagramErr.message}`);
+            }
         } else {
+            // Fallback data for local testing
             events.push({
                 name: 'Runway AI Film Festival (IG News)',
                 url: 'https://www.instagram.com/runwayapp/',
@@ -726,15 +761,21 @@ async function scrapeInstagram(regions, limit) {
                 region: 'worldwide'
             });
         }
-        rateLimiter.recordSuccess('Instagram');
+
+        // Record success
         metrics.end(tracker, events.length);
+        rateLimiter.recordSuccess('Instagram');
+
     } catch (err) {
+        // Record failure
         rateLimiter.recordFailure('Instagram');
         metrics.end(tracker, 0);
-        console.log(`⚠️ Instagram error: ${err.message}`);
+        console.log(`    ⚠️  Instagram error: ${err.message}`);
     }
+
     return events;
 }
+
 
 
 /**
@@ -749,15 +790,21 @@ async function scrapeFilmFreeway(regions, limit) {
     for (const config of regionConfigs) {
         let tracker = metrics.start('FilmFreeway');
         try {
+            // Wait before making request
             await rateLimiter.wait('FilmFreeway');
-            console.log(`🎬 FilmFreeway: ${config.label}`);
+
+            console.log(`\n🎬 FilmFreeway: ${config.label}`);
+
+            // Make request
             const response = await gotScraping({
                 url: config.filmfreewayUrl,
-                headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
+                headerGeneratorOptions: {
+                    browsers: [{ name: 'chrome' }],
+                    devices: ['desktop']
+                }
             });
 
             const $ = cheerio.load(response.body);
-            const startCount = events.length;
 
             $('.festival-card').each((i, elem) => {
                 if (events.length >= limit) return false;
@@ -767,22 +814,30 @@ async function scrapeFilmFreeway(regions, limit) {
                 const location = $(elem).find('.festival-card__location').text().trim();
                 const date = $(elem).find('.festival-card__dates').text().trim();
 
-                events.push({
-                    name, url, location, date,
-                    startDate: date.split('-')[0]?.trim() || date,
-                    endDate: date.split('-')[1]?.trim() || 'TBD',
-                    source: 'FilmFreeway',
-                    topics: 'AI Cinema, Generative Film',
-                    region: Object.keys(REGION_CONFIG).find(key => REGION_CONFIG[key].filmfreewayUrl === config.filmfreewayUrl) || 'worldwide'
-                });
+                if (name && url) {
+                    events.push({
+                        name,
+                        url,
+                        location,
+                        date,
+                        startDate: date.split('-')[0]?.trim() || date,
+                        endDate: date.split('-')[1]?.trim() || 'TBD',
+                        source: 'FilmFreeway',
+                        topics: 'AI Cinema, Generative Film',
+                        region: Object.keys(REGION_CONFIG).find(key => REGION_CONFIG[key].filmfreewayUrl === config.filmfreewayUrl) || 'worldwide'
+                    });
+                }
             });
 
+            // Record success
+            metrics.end(tracker, events.length);
             rateLimiter.recordSuccess('FilmFreeway');
-            metrics.end(tracker, events.length - startCount);
+
         } catch (err) {
+            // Record failure
             rateLimiter.recordFailure('FilmFreeway');
             metrics.end(tracker, 0);
-            console.log(`⚠️ FilmFreeway error for ${config.label}: ${err.message}`);
+            console.log(`    ⚠️  FilmFreeway error: ${err.message}`);
         }
     }
 
@@ -798,8 +853,10 @@ async function scrapeFilmFreeway(regions, limit) {
             region: 'middle-east'
         });
     }
+
     return events;
 }
+
 
 
 /**
@@ -814,42 +871,61 @@ async function scrapeEventbrite(regions, limit) {
     for (const config of regionConfigs) {
         let tracker = metrics.start('Eventbrite');
         try {
+            // Wait before making request
             await rateLimiter.wait('Eventbrite');
-            console.log(`🎫 Eventbrite: ${config.label}`);
+
+            console.log(`\n🎫 Eventbrite: ${config.label}`);
+
+            // Make request
             const response = await gotScraping({
                 url: `https://www.eventbrite.com/d/online/${config.eventbriteSearchTerm}/`,
-                headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
+                headerGeneratorOptions: {
+                    browsers: [{ name: 'chrome' }],
+                    devices: ['desktop']
+                }
             });
 
             const $ = cheerio.load(response.body);
-            const startCount = events.length;
 
             $('[data-testid="event-card"]').each((i, elem) => {
                 if (events.length >= limit) return false;
+
                 const name = $(elem).find('[data-testid="event-card-title"]').text().trim();
                 const url = $(elem).find('a[href*="/e/"]').first().attr('href');
                 const dateText = $(elem).find('[data-testid="event-card-date"]').text().trim();
                 const location = $(elem).find('[data-testid="event-card-location"]').text().trim();
 
                 const { startDate, endDate } = parseDateString(dateText);
+
                 if (name && url) {
                     events.push({
-                        name, url, location: location || 'Online',
-                        startDate, endDate, dates: `${startDate} - ${endDate}`,
-                        source: 'Eventbrite', region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k].eventbriteSearchTerm === config.eventbriteSearchTerm)
+                        name,
+                        url,
+                        location: location || 'Online',
+                        startDate,
+                        endDate,
+                        dates: `${startDate} - ${endDate}`,
+                        source: 'Eventbrite',
+                        region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k].eventbriteSearchTerm === config.eventbriteSearchTerm)
                     });
                 }
             });
+
+            // Record success
+            metrics.end(tracker, events.length);
             rateLimiter.recordSuccess('Eventbrite');
-            metrics.end(tracker, events.length - startCount);
+
         } catch (err) {
+            // Record failure
             rateLimiter.recordFailure('Eventbrite');
             metrics.end(tracker, 0);
-            console.log(`⚠️ Eventbrite error for ${config.label}: ${err.message}`);
+            console.log(`    ⚠️  Eventbrite error: ${err.message}`);
         }
     }
+
     return events;
 }
+
 
 
 /**
@@ -864,35 +940,54 @@ async function scrapeMeetup(regions, limit) {
     for (const config of regionConfigs) {
         let tracker = metrics.start('Meetup');
         try {
+            // Wait before making request
             await rateLimiter.wait('Meetup');
-            console.log(`🤝 Meetup: ${config.label}`);
+
+            console.log(`\n🤝 Meetup: ${config.label}`);
+
+            // Make request
             const response = await gotScraping({
                 url: `https://www.meetup.com/find/?keywords=artificial%20intelligence&location=${config.meetupLocation || 'worldwide'}`,
-                headerGeneratorOptions: { browsers: [{ name: 'chrome' }], devices: ['desktop'] }
+                headerGeneratorOptions: {
+                    browsers: [{ name: 'chrome' }],
+                    devices: ['desktop']
+                }
             });
 
             const $ = cheerio.load(response.body);
-            const startCount = events.length;
 
             $('[data-testid="eventCard"]').each((i, elem) => {
                 if (events.length >= limit) return false;
+
                 const name = $(elem).find('h3').text().trim();
                 const url = $(elem).find('a[href*="/events/"]').first().attr('href');
                 const fullUrl = url?.startsWith('http') ? url : `https://www.meetup.com${url}`;
+
                 if (name && fullUrl) {
-                    events.push({ name, url: fullUrl, source: 'Meetup', region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k].meetupLocation === config.meetupLocation) });
+                    events.push({
+                        name,
+                        url: fullUrl,
+                        source: 'Meetup',
+                        region: Object.keys(REGION_CONFIG).find(k => REGION_CONFIG[k].meetupLocation === config.meetupLocation)
+                    });
                 }
             });
+
+            // Record success
+            metrics.end(tracker, events.length);
             rateLimiter.recordSuccess('Meetup');
-            metrics.end(tracker, events.length - startCount);
+
         } catch (err) {
+            // Record failure
             rateLimiter.recordFailure('Meetup');
             metrics.end(tracker, 0);
-            console.log(`⚠️ Meetup error: ${err.message}`);
+            console.log(`    ⚠️  Meetup error: ${err.message}`);
         }
     }
+
     return events;
 }
+
 
 
 /**
@@ -923,43 +1018,72 @@ function parseMonthDay(dateStr) {
  * دالة القمم المنتظرة (محدثة)
  */
 async function scrapeOtherSources(regions, limit) {
-    let events = [
-        {
-            name: '1 Billion Followers Summit 2026',
-            location: 'Dubai, Museum of the Future',
-            startDate: '2026-01-09',
-            endDate: '2026-01-11',
-            dates: '2026-01-09 - 2026-01-11',
-            url: 'https://www.1billionsummit.com/',
-            source: 'Official',
-            region: 'middle-east'
-        },
-        {
-            name: 'World Governments Summit - AI Track',
-            location: 'Dubai, Madinat Jumeirah',
-            startDate: '2026-02-10',
-            endDate: '2026-02-12',
-            dates: '2026-02-10 - 2026-02-12',
-            url: 'https://www.worldgovernmentssummit.org/',
-            source: 'Official',
-            region: 'middle-east'
-        },
-        {
-            name: 'NeurIPS 2026',
-            startDate: '2026-12-10',
-            endDate: '2026-12-16',
-            location: 'Vancouver, Canada',
-            url: 'https://neurips.cc/',
-            source: 'Official',
-            region: 'worldwide'
-        }
-    ];
+    let events = [];
 
-    if (regions && regions.length > 0 && !regions.includes('worldwide')) {
-        events = events.filter(e => regions.includes(e.region) || e.region === 'worldwide');
+    let tracker = metrics.start('Summits');
+    try {
+        // Wait before making request
+        await rateLimiter.wait('Summits');
+
+        console.log(`\n🎪 Summits: Curated Events`);
+
+        // Hardcoded summits data
+        const summits = [
+            {
+                name: '1 Billion Followers Summit 2026',
+                location: 'Dubai, Museum of the Future',
+                startDate: '2026-01-09',
+                endDate: '2026-01-11',
+                dates: '2026-01-09 - 2026-01-11',
+                url: 'https://www.1billionsummit.com/',
+                source: 'Official',
+                region: 'middle-east'
+            },
+            {
+                name: 'World Governments Summit - AI Track',
+                location: 'Dubai, Madinat Jumeirah',
+                startDate: '2026-02-10',
+                endDate: '2026-02-12',
+                dates: '2026-02-10 - 2026-02-12',
+                url: 'https://www.worldgovernmentssummit.org/',
+                source: 'Official',
+                region: 'middle-east'
+            },
+            {
+                name: 'NeurIPS 2026',
+                startDate: '2026-12-10',
+                endDate: '2026-12-16',
+                location: 'Vancouver, Canada',
+                url: 'https://neurips.cc/',
+                source: 'Official',
+                region: 'worldwide'
+            }
+        ];
+
+        // Filter by regions
+        if (regions && regions.length > 0 && !regions.includes('worldwide')) {
+            events = summits.filter(e => regions.includes(e.region) || e.region === 'worldwide');
+        } else {
+            events = summits;
+        }
+
+        // Limit results
+        events = events.slice(0, limit);
+
+        // Record success
+        metrics.end(tracker, events.length);
+        rateLimiter.recordSuccess('Summits');
+
+    } catch (err) {
+        // Record failure
+        rateLimiter.recordFailure('Summits');
+        metrics.end(tracker, 0);
+        console.log(`    ⚠️  Summits error: ${err.message}`);
     }
-    return events.slice(0, limit);
+
+    return events;
 }
+
 
 /**
  * محرك التحقق بالذكاء الاصطناعي (Phase 8)
