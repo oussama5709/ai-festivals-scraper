@@ -1,31 +1,72 @@
-name: Daily AI Events Scrape
+name: 🤖 Daily AI Events Scrape
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Every day at 2 AM UTC
-  workflow_dispatch:      # Allow manual trigger
+    # يعمل كل يوم الساعة 2 صبح UTC (أو وقت آخر اختره)
+    - cron: '0 2 * * *'
+  
+  # يسمح بتشغيل يدوي من GitHub
+  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: ✅ Checkout code
+        uses: actions/checkout@v4
 
-      - name: Trigger Apify Actor
+      - name: 🔗 Trigger Apify Actor
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          APIFY_ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
         run: |
-          curl -X POST https://api.apify.com/v2/acts/YOUR_ACTOR_ID/runs \
-            -H "Authorization: Bearer $APIFY_TOKEN" \
+          echo "🚀 Starting daily scrap..."
+          
+          RESPONSE=$(curl -X POST \
+            "https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${APIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{
               "searchRegions": ["worldwide", "middle-east", "africa"],
               "maxResults": 100,
               "enableEnrichment": true,
               "enableAIValidation": true
-            }'
+            }')
+          
+          echo "Response: $RESPONSE"
+          
+          # استخرج Run ID
+          RUN_ID=$(echo $RESPONSE | grep -o '"id":"[^"]*' | cut -d'"' -f4)
+          echo "Run ID: $RUN_ID"
+          
+          # انتظر حتى ينتهي الـ Actor
+          echo "⏳ Waiting for actor to complete..."
+          for i in {1..120}; do
+            STATUS=$(curl -s "https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs/${RUN_ID}?token=${APIFY_TOKEN}" | grep -o '"status":"[^"]*' | cut -d'"' -f4)
+            
+            if [ "$STATUS" = "SUCCEEDED" ]; then
+              echo "✅ Scrape completed successfully!"
+              exit 0
+            elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "ABORTED" ]; then
+              echo "❌ Scrape failed with status: $STATUS"
+              exit 1
+            fi
+            
+            echo "Status: $STATUS... ($((i*5))s elapsed)"
+            sleep 5
+          done
+          
+          echo "⚠️ Timeout waiting for actor"
+          exit 1
 
-      - name: Notify on failure
+      - name: 📧 Notify on success
+        if: success()
+        run: |
+          echo "✅ Daily scrape completed successfully!"
+          echo "🎉 Events collected and dataset updated"
+
+      - name: 📧 Notify on failure
         if: failure()
         run: |
-          echo "❌ Scraping failed!"
+          echo "❌ Daily scrape failed"
+          echo "⚠️ Please check Apify console for details"
