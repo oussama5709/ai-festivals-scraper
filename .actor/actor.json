@@ -2,7 +2,8 @@
 	"actorSpecification": 1,
 	"environmentVariables": {
 		"APIFY_HEADLESS": "1",
-		"APIFY_MEMORY_MBYTES": "4096"
+		"APIFY_MEMORY_MBYTES": "4096",
+		"MONGODB_URI": "@MONGODB_URI"
 	},
 	"name": "ai-festivals-scraper",
 	"version": "2.2",
