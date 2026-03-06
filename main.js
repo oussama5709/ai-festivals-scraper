@@ -504,6 +504,29 @@ Actor.main(async () => {
         }
     }
 
+    // ===== SAVE TO DATABASE =====
+    try {
+        console.log(`\n💾 Saving ${processedEvents.length} events to MongoDB...`);
+        let savedCount = 0;
+        for (const event of processedEvents) {
+            const dbEvent = {
+                name: event.name,
+                url: event.sitePage,
+                category: event.category,
+                price: event.ticketPrice,
+                dates: event.dates,
+                source: event.source,
+                region: event.region,
+                createdAt: new Date().toISOString()
+            };
+            await saveEvent(dbEvent);
+            savedCount++;
+        }
+        console.log(`✅ Successfully stored ${savedCount} events in database.\n`);
+    } catch (err) {
+        console.log(`⚠️ Database save failed: ${err.message}\n`);
+    }
+
     // ===== CSV EXPORT =====
     try {
         const csvFile = path.join(process.cwd(), 'ai-festivals-results.csv');
