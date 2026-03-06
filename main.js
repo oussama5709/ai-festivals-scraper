@@ -4,7 +4,7 @@ const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
 const { gotScraping } = require('got-scraping');
-const { saveEvent } = require('./lib/db');
+const { saveEvent, closeDB } = require('./lib/db');
 
 
 // ====== 🔥 LINKEDIN RESILIENCE CLASS ======
@@ -516,6 +516,9 @@ Actor.main(async () => {
 
     // ===== PRINT METRICS REPORT =====
     metrics.report();
+
+    // Close DB connection
+    await closeDB();
 
     console.log(`\n🎉 ✅ COMPLETE! ${processedEvents.length} events successfully processed\n`);
 });

@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 🎨 AI Festivals Explorer - Premium Dashboard
 
-## Getting Started
+[![Framework](https://img.shields.io/badge/Framework-Next.js%2016-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+[![Design](https://img.shields.io/badge/Design-Tailwind%204-06B6D4?style=for-the-badge&logo=tailwindcss)](https://tailwindcss.com)
 
-First, run the development server:
+A high-performance, cinematic visualization dashboard for the AI Festivals Scraper ecosystem.
 
+---
+
+## ✨ Features
+
+-   **🌌 Cinematic UI**: Dark-mode primary design with glassmorphism and micro-animations.
+-   **⚡ Live Synchronicity**: Fetches real-time data directly from your MongoDB Atlas instance.
+-   **🔍 Smart Discovery**: Instant search and regional filtering (Worldwide, MEA, etc.).
+-   **📱 Fully Responsive**: Optimized for desktop, tablet, and mobile viewing.
+
+---
+
+## 🚀 Setup & Launch
+
+### 1. Requirements
+- Node.js 18+
+- A running MongoDB Atlas cluster containing the `ai-festivals` database.
+
+### 2. Environment Setup
+Copy `.env.example` to `.env.local`:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
+Fill in your `MONGODB_URI`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Development Run
+```bash
+npm install
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ☁️ Deployment (Vercel / Netlify)
 
-## Learn More
+This dashboard is ready for 1-click deployment:
 
-To learn more about Next.js, take a look at the following resources:
+1.  **Push** this folder to a GitHub repository.
+2.  **Connect** the repo to [Vercel](https://vercel.com).
+3.  **Add Environment Variables**: Ensure `MONGODB_URI` is set in the Vercel dashboard.
+4.  **Deploy**!
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🛠️ Architecture
 
-## Deploy on Vercel
+-   **App Router**: Modern navigation and server-side rendering.
+-   **API Routes**: Serverless endpoint at `/api/events` for secure DB access.
+-   **State Management**: React `useState` and `useEffect` for fluid interactions.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**AI Festivals Scraper Ecosystem © 2026**

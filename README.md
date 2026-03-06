@@ -1,370 +1,85 @@
-# 🤖 AI Festivals & Conferences Scraper
+# 🤖 AI Festivals v2.2 - Hardened Production Edition
 
-جامع ذكي وشامل لمهرجانات وأحداث الذكاء الاصطناعي من حول العالم
+[![Scraper Status](https://img.shields.io/badge/Scraper-Hardened%20v2.2-blueviolet?style=for-the-badge&logo=apify)](https://console.apify.com)
+[![Automation](https://img.shields.io/badge/Automation-GitHub%20Actions-blue?style=for-the-badge&logo=githubactions)](https://github.com)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-**Intelligent scraper for AI festivals, conferences & events worldwide**
-
----
-
-## 📋 الميزات | Features
-
-✅ جمع من مصادر متعددة (Eventbrite, Meetup, LinkedIn, المواقع الرسمية)  
-✅ دعم 6 مناطق جغرافية (عالمي، الشرق الأوسط، أفريقيا، أوروبا، آسيا، الأمريكيتين)  
-✅ تصنيف تلقائي للأحداث (مؤتمرات، ورش عمل، لقاءات، ندوات، قمم، هاكاثون)  
-✅ دعم اللغة العربية والإنجليزية  
-✅ تصفية بحسب التاريخ والنوع  
-✅ إزالة التكرارات التلقائية  
-✅ تصدير بصيغ متعددة (JSON, CSV, XLSX)
+**An intelligent, resilient, and enterprise-grade ecosystem for discovering AI festivals, conferences, and summits worldwide.**
 
 ---
 
-## 🚀 البدء السريع | Quick Start
+## 🌟 What's New in v2.2 (Hardened)
 
-### الخطوة 1: رفع الـ Actor على Apify
+The v2.2 update transforms the scraper from a script into a robust production platform:
 
+-   **🛡️ Resilient Architecture**: `LinkedInSelectorManager` with adaptive fallbacks for surviving DOM changes.
+-   **⏳ Intelligent Anti-Blocking**: `AdaptiveRateLimiter` with source-specific delays and exponential backoff.
+-   **📊 Metrics Engine**: Real-time tracking of success rates, speed (evt/sec), and memory usage.
+-   **🔋 MongoDB persistence**: Automatic extraction, validation, and storage in MongoDB Atlas.
+-   **🎨 Premium Dashboard**: Next.js 16 + Tailwind 4 visualization with glassmorphism design.
+
+---
+
+## 🛠️ Tech Stack
+
+-   **Core**: Node.js, Cheerio, Got-Scraping
+-   **Platform**: Apify (Cloud Actor)
+-   **Database**: MongoDB Atlas
+-   **Frontend**: Next.js 16 (App Router), Tailwind CSS 4
+-   **Automation**: GitHub Actions
+
+---
+
+## 🚀 Deployment Guide
+
+### 1. Cloud Scraper (Apify)
 ```bash
-# تثبيت Apify CLI (إن لم تكن قد ثبته)
-npm install -g apify-cli
-
-# تسجيل الدخول
-apify login
-
-# إنشاء actor جديد
-apify create ai-festivals-scraper
-
-# نسخ الملفات
-cp ai-festivals-scraper.js ./
-cp package.json ./
-cp INPUT_SCHEMA.json ./
-
-# رفع التغييرات
+# Push to Apify
 apify push
+# Call the actor
+apify call ai-festivals-scraper
 ```
 
-### الخطوة 2: تشغيل الـ Actor
+### 2. Automation (GitHub)
+- Create a repo on GitHub.
+- Add `APIFY_TOKEN` and `APIFY_ACTOR_ID` (T4QEjwkFqTJTe0S4F) to **Settings > Secrets**.
+- The workflow in `.github/workflows/daily-scrape.yml` triggers every day at 2:00 AM UTC.
 
+### 3. Dashboard (Local/Vercel)
 ```bash
-# محلياً (للاختبار)
-apify run
+cd dashboard
+npm install
+npm run dev
+```
+*Access at [http://localhost:3000](http://localhost:3000)*
 
-# أو من واجهة Apify
-# اذهب إلى https://console.apify.com
+---
+
+## 📖 Configuration (INPUT_SCHEMA)
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `searchRegions` | Array | regions to search (middle-east, africa, worldwide) |
+| `maxResults` | Number | limit of items per source |
+| `enableEnrichment` | Boolean | fetch additional event details |
+| `enableAIValidation` | Boolean | use AI to verify "AI relevancy" |
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file based on `.env.example`:
+```env
+MONGODB_URI=your_mongodb_connection_string
+APIFY_TOKEN=your_apify_api_token
+ANTHROPIC_API_KEY=optional_for_advanced_validation
 ```
 
 ---
 
-## 📖 التوثيق الكامل | Full Documentation
-
-### 1. المدخلات | Inputs
-
-#### `searchRegions` (مصفوفة)
-**المناطق التي تريد البحث فيها**
-
-الخيارات:
-- `worldwide` - البحث العالمي
-- `middle-east` - الشرق الأوسط
-- `africa` - أفريقيا
-- `europe` - أوروبا
-- `asia` - آسيا
-- `americas` - الأمريكيتين
-
-**مثال:**
-```json
-{
-  "searchRegions": ["middle-east", "africa", "asia"]
-}
-```
+## 📝 License
+MIT License - Copyright (c) 2026 AI Festivals Contributors
 
 ---
 
-#### `upcomingOnly` (منطقي)
-**جمع الأحداث القادمة فقط (لم تحدث بعد)**
-
-القيمة الافتراضية: `true`
-
-```json
-{
-  "upcomingOnly": true
-}
-```
-
----
-
-#### `minDate` (تاريخ)
-**لا تجمع أحداث قبل هذا التاريخ**
-
-الصيغة: `YYYY-MM-DD`  
-مثال: `2025-03-03`
-
-```json
-{
-  "minDate": "2025-06-01"
-}
-```
-
----
-
-#### `maxResults` (رقم)
-**الحد الأقصى لعدد الأحداث**
-
-- الحد الأدنى: 10
-- الحد الأقصى: 1000
-- الافتراضي: 100
-
-```json
-{
-  "maxResults": 500
-}
-```
-
----
-
-#### `includeEventTypes` (مصفوفة)
-**أنواع الأحداث المراد تضمينها**
-
-الخيارات:
-- `conference` - مؤتمرات رسمية
-- `workshop` - ورش عمل
-- `meetup` - لقاءات ومجتمعات
-- `webinar` - ندوات أونلاين
-- `summit` - قمم صناعية
-- `hackathon` - هاكاثون
-- `course` - دورات تدريبية
-
-```json
-{
-  "includeEventTypes": ["conference", "workshop", "webinar"]
-}
-```
-
----
-
-#### `dataSources` (مصفوفة)
-**مصادر البيانات التي تريد جمع من منها**
-
-الخيارات:
-- `eventbrite` - منصة Eventbrite
-- `meetup` - مجتمعات Meetup
-- `linkedin` - أحداث LinkedIn
-- `official-websites` - المواقع الرسمية للمؤتمرات
-- `conference-aggregators` - مجمعات المؤتمرات
-
-```json
-{
-  "dataSources": ["eventbrite", "meetup", "official-websites"]
-}
-```
-
----
-
-#### `language` (نص)
-**لغة الإخراج**
-
-الخيارات: `ar` (عربي) أو `en` (إنجليزي)
-
-```json
-{
-  "language": "ar"
-}
-```
-
----
-
-#### `outputFormat` (نص)
-**صيغة الإخراج النهائي**
-
-الخيارات:
-- `json` - صيغة JSON
-- `csv` - جداول CSV
-- `xlsx` - ملفات Excel
-
-```json
-{
-  "outputFormat": "json"
-}
-```
-
----
-
-### 2. المخرجات | Outputs
-
-الـ Actor يحفظ البيانات في Dataset يحتوي على:
-
-```json
-{
-  "summary": {
-    "totalEvents": 250,
-    "conferences": 45,
-    "workshops": 80,
-    "meetups": 95,
-    "generatedAt": "2025-03-03T10:30:00Z",
-    "regions": ["middle-east", "africa"]
-  },
-  "events": [
-    {
-      "name": "NeurIPS 2025",
-      "url": "https://neurips.cc/",
-      "source": "official-website",
-      "type": "major-conference",
-      "category": "conference",
-      "dateInfo": "2025-12-09",
-      "location": "New Orleans, USA",
-      "description": "المؤتمر الدولي الرسمي...",
-      "tags": ["ai", "machine-learning", "research"],
-      "region": "americas",
-      "addedAt": "2025-03-03T10:30:00Z"
-    }
-  ]
-}
-```
-
----
-
-## 🔗 الربط مع n8n
-
-### الخطوة 1: إضافة Apify Node إلى n8n
-
-```bash
-npm install @apify/n8n-nodes-apify
-```
-
-### الخطوة 2: إنشاء Workflow
-
-في n8n:
-1. أضف node **Apify**
-2. اختر **Run Actor**
-3. أدخل Actor ID: `ai-festivals-scraper`
-4. أدخل المدخلات المطلوبة
-
-### الخطوة 3: معالجة النتائج
-
-```javascript
-// استخرج البيانات من Apify
-const events = $node['Apify'].json.events;
-
-// رشحها وصنفها
-const aiEvents = events.filter(e => 
-  e.tags.includes('ai') && 
-  new Date(e.dateInfo) > new Date()
-);
-
-// أرسلها إلى قاعدة بيانات أو Slack
-return aiEvents;
-```
-
----
-
-## 💻 أمثلة استخدام | Usage Examples
-
-### مثال 1: جمع مؤتمرات الشرق الأوسط فقط
-
-```json
-{
-  "searchRegions": ["middle-east"],
-  "includeEventTypes": ["conference", "summit"],
-  "minDate": "2025-06-01",
-  "maxResults": 50
-}
-```
-
-### مثال 2: جمع كل الورش والدورات العالمية
-
-```json
-{
-  "searchRegions": ["worldwide"],
-  "includeEventTypes": ["workshop", "course", "webinar"],
-  "maxResults": 200,
-  "outputFormat": "csv"
-}
-```
-
-### مثال 3: جمع أحداث أفريقيا وآسيا للعام القادم
-
-```json
-{
-  "searchRegions": ["africa", "asia"],
-  "minDate": "2026-01-01",
-  "upcomingOnly": true,
-  "dataSources": ["eventbrite", "meetup"]
-}
-```
-
----
-
-## 🔧 المتطلبات التقنية | Technical Requirements
-
-- **Node.js**: 16.0+
-- **npm**: 7.0+
-- **Apify Account**: مجاني أو مدفوع
-- **Internet Connection**: للوصول للمصادر
-
----
-
-## 📊 هيكل البيانات | Data Structure
-
-كل حدث يحتوي على:
-
-```javascript
-{
-  name: String,           // اسم الحدث
-  url: String,            // رابط الحدث
-  source: String,         // مصدر البيانات
-  type: String,           // نوع المصدر
-  category: String,       // تصنيف الحدث
-  date: String,           // تاريخ الحدث
-  location: String,       // الموقع الجغرافي
-  description: String,    // الوصف
-  tags: String[],         // الكلمات الرئيسية
-  region: String,         // المنطقة المكتشفة
-  addedAt: String         // وقت الإضافة
-}
-```
-
----
-
-## 🐛 استكشاف الأخطاء | Troubleshooting
-
-### المشكلة: "No results found"
-
-**الحل:**
-1. تأكد من صحة `minDate`
-2. أضف أكثر من مصدر بيانات
-3. اختر `worldwide` بدلاً من منطقة محددة
-
-### المشكلة: "Timeout error"
-
-**الحل:**
-1. قلل عدد المناطق المختارة
-2. قلل `maxResults`
-3. استخدم Apify Proxy
-
----
-
-## 📝 الترخيص | License
-
-MIT License
-
----
-
-## 👨‍💻 الدعم | Support
-
-للمساعدة والدعم:
-- GitHub Issues: [أنشئ issue جديدة]
-- Email: support@example.com
-- Apify Community: https://www.apify.com/community
-
----
-
-## 🔄 التحديثات القادمة | Upcoming Updates
-
-- [ ] دعم Instagram Events و TikTok Events
-- [ ] تنبيهات بريدية تلقائية
-- [ ] تكامل مع Google Calendar
-- [ ] دعم لغات إضافية
-- [ ] رسوم بيانية وتحليلات متقدمة
-
----
-
-**صُنع بـ ❤️ لمجتمع الذكاء الاصطناعي العربي**
-
-Made with ❤️ for the Arab AI Community
+**Made with ❤️ for the Global AI Community**

@@ -1,33 +1,24 @@
-import { getEvents } from '../../../lib/db';
+import { MongoClient } from 'mongodb';
 
-export async function GET(request) {
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://username:password@cluster.mongodb.net/ai-festivals';
+
+export async function GET() {
     try {
-        const { searchParams } = new URL(request.url);
-        const region = searchParams.get('region');
+        const client = new MongoClient(MONGO_URI);
+        await client.connect();
+        const db = client.db('ai-festivals');
+        const events = await db.collection('events').find({}).sort({ startDate: 1 }).toArray();
+        await client.close();
 
-        const filters = {};
-        if (region && region !== 'worldwide') {
-            filters.region = region;
-        }
-
-        const events = await getEvents(filters);
-
-        return new Response(JSON.stringify({
-            success: true,
-            count: events.length,
-            events: events.slice(0, 100)
-        }), {
+        return new Response(JSON.stringify(events), {
+            headers: { 'Content-Type': 'application/json' },
             status: 200,
-            headers: { 'Content-Type': 'application/json' }
         });
-
     } catch (error) {
-        return new Response(JSON.stringify({
-            success: false,
-            error: error.message
-        }), {
+        console.error('API Error:', error);
+        return new Response(JSON.stringify({ error: 'Failed to fetch events' }), {
+            headers: { 'Content-Type': 'application/json' },
             status: 500,
-            headers: { 'Content-Type': 'application/json' }
         });
     }
 }
