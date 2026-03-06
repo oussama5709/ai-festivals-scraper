@@ -37,23 +37,30 @@ jobs:
           
           # استخرج Run ID
           RUN_ID=$(echo $RESPONSE | grep -o '"id":"[^"]*' | cut -d'"' -f4)
+          
+          if [ -z "$RUN_ID" ]; then
+            echo "❌ Failed to start actor. Response was: $RESPONSE"
+            exit 1
+          fi
+          
           echo "Run ID: $RUN_ID"
           
           # انتظر حتى ينتهي الـ Actor
           echo "⏳ Waiting for actor to complete..."
-          for i in {1..120}; do
-            STATUS=$(curl -s "https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs/${RUN_ID}?token=${APIFY_TOKEN}" | grep -o '"status":"[^"]*' | cut -d'"' -f4)
+          for i in {1..240}; do
+            RUN_DATA=$(curl -s "https://api.apify.com/v2/actor-runs/${RUN_ID}?token=${APIFY_TOKEN}")
+            STATUS=$(echo $RUN_DATA | grep -o '"status":"[^"]*' | cut -d'"' -f4)
             
             if [ "$STATUS" = "SUCCEEDED" ]; then
               echo "✅ Scrape completed successfully!"
               exit 0
-            elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "ABORTED" ]; then
+            elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "ABORTED" ] || [ "$STATUS" = "TIMED-OUT" ]; then
               echo "❌ Scrape failed with status: $STATUS"
               exit 1
             fi
             
-            echo "Status: $STATUS... ($((i*5))s elapsed)"
-            sleep 5
+            echo "Status: $STATUS... ($((i*15))s elapsed)"
+            sleep 15
           done
           
           echo "⚠️ Timeout waiting for actor"
